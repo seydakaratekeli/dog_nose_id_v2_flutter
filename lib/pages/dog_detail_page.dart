@@ -2,11 +2,10 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-
+import '../widgets/report_lost_dog_dialog.dart';
 import '../models/dog.dart';
 import '../models/scan_history.dart';
 import '../widgets/history_card.dart';
-import '../components/model_warning.dart';
 
 class DogDetailPage extends StatefulWidget {
   final Dog dog;
@@ -141,9 +140,20 @@ class _DogDetailPageState extends State<DogDetailPage> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                    onPressed: () =>
-                        context.push("/map", extra: widget.dog.id),
-                    icon: const Icon(Icons.location_off),
+                   // Eski kod: context.push("/map", extra: widget.dog.id),
+// Yeni kod:
+onPressed: () async {
+  // Diyaloğu açıyoruz ve bitmesini bekliyoruz
+  final result = await showDialog(
+    context: context,
+    builder: (context) => ReportLostDogDialog(dog: widget.dog),
+  );
+
+  // Eğer işlem başarılıysa (true döndüyse) sayfayı yenile
+  if (result == true) {
+    _checkLostStatus();
+  }
+}, icon: const Icon(Icons.location_off),
                     label: const Text("Kayıp Olarak İşaretle"),
                   ),
                 ),

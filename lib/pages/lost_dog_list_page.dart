@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../components/model_warning.dart';
@@ -9,6 +8,7 @@ class LostDogListPage extends StatelessWidget {
   const LostDogListPage({super.key});
 
   Stream<List<Map<String, dynamic>>> _lostDogsStream() {
+    // 'lost_dogs' koleksiyonunu dinliyoruz
     return FirebaseFirestore.instance
         .collection("lost_dogs")
         .orderBy("timestamp", descending: true)
@@ -16,16 +16,23 @@ class LostDogListPage extends StatelessWidget {
         .map((snapshot) => snapshot.docs.map((e) => e.data()).toList());
   }
 
-  Future<Dog?> _getDog(String dogId, String userId) async {
-    final doc = await FirebaseFirestore.instance
-        .collection("users")
-        .doc(userId)
-        .collection("dogs")
-        .doc(dogId)
-        .get();
+  // Köpeğin detaylarını sahibinin profilinden çekiyoruz
+  Future<Dog?> _getDog(String? dogId, String? userId) async {
+    if (dogId == null || userId == null) return null;
 
-    if (doc.exists) {
-      return Dog.fromMap(doc.data()!);
+    try {
+      final doc = await FirebaseFirestore.instance
+          .collection("users")
+          .doc(userId)
+          .collection("dogs")
+          .doc(dogId)
+          .get();
+
+      if (doc.exists) {
+        return Dog.fromMap(doc.data()!);
+      }
+    } catch (e) {
+      debugPrint("Köpek verisi çekilemedi: $e");
     }
     return null;
   }
@@ -37,24 +44,27 @@ class LostDogListPage extends StatelessWidget {
 
       body: Column(
         children: [
-          const ModelWarning(),
-          const SizedBox(height: 6),
-
+          // Model uyarısı (İsteğe bağlı)
+          // const ModelWarning(), 
+          
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _lostDogsStream(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
-                  return const Center(
-                      child: CircularProgressIndicator());
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
                 }
 
-                final lostList = snapshot.data!;
+                if (snapshot.hasError) {
+                  return Center(child: Text("Hata: ${snapshot.error}"));
+                }
+
+                final lostList = snapshot.data ?? [];
 
                 if (lostList.isEmpty) {
                   return const Center(
                     child: Text(
-                      "Herhangi bir kayıp ihbarı bulunmuyor.",
+                      "Şu an kayıp ihbarı bulunmuyor.",
                       style: TextStyle(fontSize: 16),
                     ),
                   );
@@ -66,48 +76,87 @@ class LostDogListPage extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final item = lostList[index];
 
+                    // 1. SORUNUN ÇÖZÜMÜ: Anahtar isimlerini güncelledik ve yedekledik
+                    // Yeni kodda 'ownerId', eski kodda 'userId' olabilir. İkisini de dene.
+                    final ownerId = item["ownerId"] ?? item["userId"];
+                    final dogId = item["dogId"];
+                    
+                    // Konum verilerini güvenli alalım (double'a çevirerek)
+                    final rawLat = item["latitude"] ?? item["lat"];
+                    final rawLng = item["longitude"] ?? item["lng"];
+                    
+                    final double lat = (rawLat is num) ? rawLat.toDouble() : 0.0;
+                    final double lng = (rawLng is num) ? rawLng.toDouble() : 0.0;
+
+                    // Eğer köpeğin sahibi veya ID'si yoksa gösterme
+                    if (ownerId == null || dogId == null) {
+                      return const SizedBox();
+                    }
+
                     return FutureBuilder<Dog?>(
-                      future: _getDog(item["dogId"], item["userId"]),
+                      future: _getDog(dogId, ownerId),
                       builder: (context, dogSnap) {
-                        if (!dogSnap.hasData) {
+                        if (dogSnap.connectionState == ConnectionState.waiting) {
+                          return const SizedBox(
+                            height: 100, 
+                            child: Center(child: LinearProgressIndicator())
+                          );
+                        }
+
+                        if (!dogSnap.hasData || dogSnap.data == null) {
+                          // Köpek silinmiş olabilir, boş kart gösterme
                           return const SizedBox();
                         }
 
                         final dog = dogSnap.data!;
-                        final posLat = item["lat"];
-                        final posLng = item["lng"];
 
                         return Card(
-                          elevation: 1,
+                          elevation: 3,
                           margin: const EdgeInsets.only(bottom: 12),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12)
+                          ),
                           child: ListTile(
-                            leading: CircleAvatar(
-                              radius: 28,
-                              backgroundImage: dog.imageUrl.isNotEmpty
-                                  ? NetworkImage(dog.imageUrl)
-                                  : null,
-                              child: dog.imageUrl.isEmpty
-                                  ? const Icon(Icons.pets, size: 28)
-                                  : null,
+                            contentPadding: const EdgeInsets.all(10),
+                            leading: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              child: Image.network(
+                                dog.imageUrl,
+                                width: 60,
+                                height: 60,
+                                fit: BoxFit.cover,
+                                errorBuilder: (c, e, s) => const Icon(Icons.pets, size: 40),
+                              ),
                             ),
 
                             title: Text(
                               dog.name,
                               style: const TextStyle(
-                                fontWeight: FontWeight.w700,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 18,
                               ),
                             ),
 
-                            subtitle: Text(
-                              "Irk: ${dog.breed} • Yaş: ${dog.age}\n"
-                              "Konum: (${posLat.toStringAsFixed(4)}, ${posLng.toStringAsFixed(4)})",
+                            subtitle: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const SizedBox(height: 4),
+                                Text("Irk: ${dog.breed} • Yaş: ${dog.age}"),
+                                const SizedBox(height: 2),
+                                Text(
+                                  "Konum: ${lat.toStringAsFixed(4)}, ${lng.toStringAsFixed(4)}",
+                                  style: TextStyle(color: Colors.grey[700], fontSize: 12),
+                                ),
+                              ],
                             ),
 
                             trailing: IconButton(
-                              icon: const Icon(Icons.map_outlined,
-                                  color: Colors.blue),
-                              tooltip: "Haritada Göster",
+                              icon: const Icon(Icons.map_outlined, color: Colors.blue),
+                              tooltip: "Konumu Gör",
                               onPressed: () {
+                                // Harita sayfasına sadece 'dogId' gönderiyoruz, 
+                                // ama harita sayfası bu köpeğin kayıp kaydını bulmak zorunda kalabilir.
+                                // Şimdilik mevcut akışına uyalım.
                                 context.push("/map", extra: dog.id);
                               },
                             ),

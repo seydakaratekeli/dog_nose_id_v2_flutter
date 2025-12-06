@@ -134,7 +134,7 @@ class _ScanPageState extends State<ScanPage> {
       // -----------------------------
       // 4) SAHTE EŞİK → MODEL GELİNCE AYARLANACAK
       // -----------------------------
-      const matchThreshold = 0.75;
+      const matchThreshold = 0.0;
 
       if (lostDogId != null) {
         // 💛 LOST DOG FLOW
