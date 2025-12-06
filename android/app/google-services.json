@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "858569359588",
+    "project_id": "dog-nose-id-v2",
+    "storage_bucket": "dog-nose-id-v2.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:858569359588:android:a943eb2728619dc9646cf1",
+        "android_client_info": {
+          "package_name": "com.example.dog_nose_id_v2"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBn8Sxdg0A2RT9Db-gJu_eDZKDGxnmGjks"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
