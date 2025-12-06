@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import '../components/model_warning.dart';
 
 import '../models/dog.dart';
 
@@ -76,9 +77,17 @@ class HomePage extends StatelessWidget {
                   tooltip: "Kayıp köpekler haritası",
                   onPressed: () => context.push('/map'),
                 ),
+                IconButton(
+  icon: const Icon(Icons.report_gmailerrorred_outlined),
+  tooltip: "Kayıp ihbarları",
+  onPressed: () => context.push('/lost-dogs'),
+),
+
               ],
             ),
           ),
+
+          
 
           const SizedBox(height: 4),
 

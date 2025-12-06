@@ -25,6 +25,22 @@ class _ScanPageState extends State<ScanPage> {
 
   final picker = ImagePicker();
 
+  // LOST-DOG PARAMETRELERİ
+  String? lostDogId;
+  String? lostRecordId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+
+    final extra = GoRouterState.of(context).extra;
+
+    if (extra != null && extra is Map<String, dynamic>) {
+      lostDogId = extra["lostDogId"];
+      lostRecordId = extra["lostRecordId"];
+    }
+  }
+
   // -----------------------
   // FOTOĞRAF SEÇME
   // -----------------------
@@ -39,7 +55,7 @@ class _ScanPageState extends State<ScanPage> {
   }
 
   // -----------------------
-  // SAHTE EMBEDDING (MODEL GELİNCE DEĞİŞECEK)
+  // SAHTE EMBEDDING (MODEL YERİNE)
   // -----------------------
   List<double> _generateFakeEmbedding() {
     final rand = Random();
@@ -47,7 +63,7 @@ class _ScanPageState extends State<ScanPage> {
   }
 
   // -----------------------
-  // TARAMA İŞLEMİ
+  // SCAN START
   // -----------------------
   Future<void> _startScan() async {
     if (_image == null) {
@@ -62,7 +78,9 @@ class _ScanPageState extends State<ScanPage> {
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
 
-      // 1) KULLANICININ KÖPEKLERİNİ ÇEK
+      // -----------------------------
+      // 1) KULLANICININ TÜM KÖPEKLERİ
+      // -----------------------------
       final dogDocs = await FirebaseFirestore.instance
           .collection("users")
           .doc(uid)
@@ -76,23 +94,28 @@ class _ScanPageState extends State<ScanPage> {
         return;
       }
 
-      // Dog model listesi
-      final dogs = dogDocs.docs
-          .map((d) => Dog.fromMap(d.data()))
-          .toList();
+      final dogs = dogDocs.docs.map((d) => Dog.fromMap(d.data())).toList();
 
-      // 2) Seçili fotoğraf için sahte embedding
+      // -----------------------------
+      // 2) FOTOĞRAF EMBEDDING
+      // -----------------------------
       final scanEmbedding = _generateFakeEmbedding();
 
-      // 3) HER KÖPEKLE BENZERLİK HESABI
-      double bestScore = -1;
+      // -----------------------------
+      // 3) EŞLEŞTİRME
+      // -----------------------------
       Dog? bestMatch;
+      double bestScore = -1;
 
       for (var dog in dogs) {
-        // her köpeğe sahte embedding atayalım
+        // LOSTDOGFLOW → sadece kayıp köpek eşleşsin
+        if (lostDogId != null && dog.id != lostDogId) {
+          continue; // diğer köpekler devre dışı
+        }
+
+        // Geçici FAKE embedding
         final dogEmbedding = _generateFakeEmbedding();
 
-        // cosine similarity hesaplanıyor
         final score = _cosineSimilarity(scanEmbedding, dogEmbedding);
 
         if (score > bestScore) {
@@ -101,14 +124,42 @@ class _ScanPageState extends State<ScanPage> {
         }
       }
 
+      // Eğer LostDogFlow aktifse → diğer köpekler zaten eşleşmeye girmedi.
+
       if (bestMatch == null) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Eşleşme bulunamadı.")),
-        );
+        context.push("/not-found");
         return;
       }
 
-      // 4) FOTOĞRAFI STORAGE'A YÜKLE
+      // -----------------------------
+      // 4) SAHTE EŞİK → MODEL GELİNCE AYARLANACAK
+      // -----------------------------
+      const matchThreshold = 0.75;
+
+      if (lostDogId != null) {
+        // 💛 LOST DOG FLOW
+        if (bestScore >= matchThreshold) {
+          // Firestore'da "found" olarak işaretle
+          await FirebaseFirestore.instance
+              .collection("lost_dogs")
+              .doc(lostRecordId)
+              .update({
+            "found": true,
+            "foundAt": DateTime.now(),
+            "matchedDogId": bestMatch.id,
+          });
+
+          context.push("/found", extra: bestMatch);
+          return;
+        } else {
+          context.push("/not-found");
+          return;
+        }
+      }
+
+      // -----------------------------
+      // 5) NORMAL SCAN FLOW → TARAYI KAYDET
+      // -----------------------------
       final ref = FirebaseStorage.instance
           .ref()
           .child("scan_history")
@@ -117,11 +168,8 @@ class _ScanPageState extends State<ScanPage> {
       await ref.putFile(_image!);
       final scanImageUrl = await ref.getDownloadURL();
 
-      // 5) TARAYI FIRESTORE'A KAYDET
-      final historyId = FirebaseFirestore.instance
-          .collection("scan_history")
-          .doc()
-          .id;
+      final historyId =
+          FirebaseFirestore.instance.collection("scan_history").doc().id;
 
       final history = ScanHistory(
         id: historyId,
@@ -136,13 +184,12 @@ class _ScanPageState extends State<ScanPage> {
           .doc(historyId)
           .set(history.toMap());
 
-      // 6) SONUÇ SAYFASINA GİT
+      // Sonuç ekranına git
       context.push("/result", extra: {
         "dog": bestMatch,
         "score": bestScore,
         "image": _image,
       });
-
     } finally {
       if (mounted) {
         setState(() => _isScanning = false);
@@ -169,8 +216,6 @@ class _ScanPageState extends State<ScanPage> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(title: const Text("Burun İzi Taraması")),
 
@@ -178,9 +223,9 @@ class _ScanPageState extends State<ScanPage> {
         padding: const EdgeInsets.all(18),
         child: Column(
           children: [
-            // -----------------------
-            // FOTOĞRAF ALANI
-            // -----------------------
+
+            
+            // FOTO ALANI
             Container(
               height: 240,
               width: double.infinity,
@@ -195,26 +240,19 @@ class _ScanPageState extends State<ScanPage> {
                         Icon(Icons.photo_camera_back,
                             size: 60, color: Colors.grey.shade500),
                         const SizedBox(height: 8),
-                        Text(
-                          "Fotoğraf Seçilmedi",
-                          style: TextStyle(color: Colors.grey.shade600),
-                        )
+                        Text("Fotoğraf Seçilmedi",
+                            style: TextStyle(color: Colors.grey.shade600)),
                       ],
                     )
                   : ClipRRect(
                       borderRadius: BorderRadius.circular(14),
-                      child: Image.file(
-                        _image!,
-                        fit: BoxFit.cover,
-                      ),
+                      child: Image.file(_image!, fit: BoxFit.cover),
                     ),
             ),
 
             const SizedBox(height: 20),
 
-            // -----------------------
-            // FOTOĞRAF SEÇME BUTONLARI
-            // -----------------------
+            // FOTO SEÇME BUTONLARI
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
@@ -231,11 +269,9 @@ class _ScanPageState extends State<ScanPage> {
               ],
             ),
 
-            const SizedBox(height: 30),
+            const SizedBox(height: 28),
 
-            // -----------------------
-            // TARAMA BAŞLAT BUTONU
-            // -----------------------
+            // TARAMA BUTONU
             SizedBox(
               width: double.infinity,
               child: ElevatedButton(
@@ -247,14 +283,13 @@ class _ScanPageState extends State<ScanPage> {
                         child: CircularProgressIndicator(
                           strokeWidth: 2,
                           color: Colors.white,
-                        ),
-                      )
+                        ))
                     : const Text("Taramayı Başlat"),
               ),
             ),
           ],
         ),
       ),
-    );
+    ); 
   }
 }

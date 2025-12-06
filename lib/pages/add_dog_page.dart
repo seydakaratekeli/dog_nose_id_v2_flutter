@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 import '../models/dog.dart';
+import '../components/model_warning.dart';
 
 class AddDogPage extends StatefulWidget {
   const AddDogPage({super.key});
@@ -125,6 +126,8 @@ class _AddDogPageState extends State<AddDogPage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+
+               
               // ------------------------
               // FOTOĞRAF ALANI
               // ------------------------

@@ -6,24 +6,34 @@ class ModelWarning extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(14),
       margin: const EdgeInsets.only(bottom: 20),
       decoration: BoxDecoration(
         color: Colors.amber.shade100,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: Colors.amber.shade700),
+        border: Border.all(
+          color: Colors.amber.shade700,
+          width: 1.2,
+        ),
       ),
       child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(Icons.info_outline, color: Colors.amber.shade800),
-          const SizedBox(width: 10),
+          Icon(
+            Icons.info_outline,
+            color: Colors.amber.shade800,
+            size: 26,
+          ),
+          const SizedBox(width: 12),
           Expanded(
             child: Text(
-              "⚠️ Bu özellik geçici olarak çalışmaktadır. "
-              "Derin Öğrenme modeli entegre edildiğinde gerçek sonuçlar üretilecektir.",
+              "Bu özellik şu anda geçici modda çalışmaktadır.\n"
+              "Derin Öğrenme modeli entegre edildiğinde gerçek biyometrik sonuçlar üretilecektir.",
               style: TextStyle(
-                color: Colors.amber.shade900,
+                fontSize: 14.5,
                 fontWeight: FontWeight.w600,
+                color: Colors.amber.shade900,
+                height: 1.35,
               ),
             ),
           ),

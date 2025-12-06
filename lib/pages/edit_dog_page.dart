@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:go_router/go_router.dart';
 
+import '../components/model_warning.dart';
 import '../models/dog.dart';
 
 class EditDogPage extends StatefulWidget {
@@ -91,6 +92,10 @@ class _EditDogPageState extends State<EditDogPage> {
 
           child: ListView(
             children: [
+
+              // ⭐ MODEL UYARISI (Geçici Mod)
+    const ModelWarning(),
+    const SizedBox(height: 20),
               // Fotoğraf
               Center(
                 child: GestureDetector(

@@ -12,6 +12,9 @@ import 'pages/lost_map_page.dart';
 import 'pages/dog_detail_page.dart';
 import 'pages/profile_page.dart';
 import 'pages/edit_dog_page.dart';
+import 'pages/lost_dog_list_page.dart';
+import 'pages/found_status_page.dart';
+import 'pages/not_found_page.dart';
 
 import 'main_shell.dart';
 
@@ -79,6 +82,24 @@ final appRouter = GoRouter(
             return DogDetailPage(dog: dog);
           },
         ),
+
+        GoRoute(
+  path: '/lost-dogs',
+  builder: (context, state) => const LostDogListPage(),
+),
+
+GoRoute(
+  path: '/found',
+  builder: (context, state) {
+    final dog = state.extra as Dog;
+    return FoundDogPage(dog: dog);
+  },
+),
+
+GoRoute(
+  path: '/not-found',
+  builder: (context, state) => const NotFoundPage(),
+),
 
         // EDIT DOG
         GoRoute(
