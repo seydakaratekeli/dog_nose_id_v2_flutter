@@ -118,6 +118,13 @@ class LostDogListPage extends StatelessWidget {
                           ),
                           child: ListTile(
                             contentPadding: const EdgeInsets.all(10),
+                            onTap: () {
+      // Köpeğin detay sayfasına git ve 'dog' nesnesini gönder
+      context.push("/dog-detail", extra: dog);
+    },
+
+
+
                             leading: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
                               child: Image.network(
