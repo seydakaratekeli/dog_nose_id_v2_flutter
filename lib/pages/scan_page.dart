@@ -61,9 +61,8 @@ class _ScanPageState extends State<ScanPage> {
     final rand = Random();
     return List.generate(128, (_) => rand.nextDouble());
   }
-
   // -----------------------
-  // SCAN START
+  // SCAN START (REVİZE EDİLDİ)
   // -----------------------
   Future<void> _startScan() async {
     if (_image == null) {
@@ -78,9 +77,7 @@ class _ScanPageState extends State<ScanPage> {
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
 
-      // -----------------------------
       // 1) KULLANICININ TÜM KÖPEKLERİ
-      // -----------------------------
       final dogDocs = await FirebaseFirestore.instance
           .collection("users")
           .doc(uid)
@@ -96,26 +93,20 @@ class _ScanPageState extends State<ScanPage> {
 
       final dogs = dogDocs.docs.map((d) => Dog.fromMap(d.data())).toList();
 
-      // -----------------------------
-      // 2) FOTOĞRAF EMBEDDING
-      // -----------------------------
+      // 2) FOTOĞRAF EMBEDDING (SAHTE)
       final scanEmbedding = _generateFakeEmbedding();
 
-      // -----------------------------
       // 3) EŞLEŞTİRME
-      // -----------------------------
       Dog? bestMatch;
       double bestScore = -1;
 
       for (var dog in dogs) {
-        // LOSTDOGFLOW → sadece kayıp köpek eşleşsin
+        // Eğer kayıp modundaysak, SADECE o köpekle karşılaştır
         if (lostDogId != null && dog.id != lostDogId) {
-          continue; // diğer köpekler devre dışı
+          continue; 
         }
 
-        // Geçici FAKE embedding
-        final dogEmbedding = _generateFakeEmbedding();
-
+        final dogEmbedding = _generateFakeEmbedding(); // Köpeğin sahte verisi
         final score = _cosineSimilarity(scanEmbedding, dogEmbedding);
 
         if (score > bestScore) {
@@ -124,42 +115,14 @@ class _ScanPageState extends State<ScanPage> {
         }
       }
 
-      // Eğer LostDogFlow aktifse → diğer köpekler zaten eşleşmeye girmedi.
-
       if (bestMatch == null) {
         context.push("/not-found");
         return;
       }
 
-      // -----------------------------
-      // 4) SAHTE EŞİK → MODEL GELİNCE AYARLANACAK
-      // -----------------------------
-      const matchThreshold = 0.0;
-
-      if (lostDogId != null) {
-        // 💛 LOST DOG FLOW
-        if (bestScore >= matchThreshold) {
-          // Firestore'da "found" olarak işaretle
-          await FirebaseFirestore.instance
-              .collection("lost_dogs")
-              .doc(lostRecordId)
-              .update({
-            "found": true,
-            "foundAt": DateTime.now(),
-            "matchedDogId": bestMatch.id,
-          });
-
-          context.push("/found", extra: bestMatch);
-          return;
-        } else {
-          context.push("/not-found");
-          return;
-        }
-      }
-
-      // -----------------------------
-      // 5) NORMAL SCAN FLOW → TARAYI KAYDET
-      // -----------------------------
+      // --- BURASI ÇOK ÖNEMLİ: TARİHÇEYE HER HALÜKARDA KAYDET ---
+      
+      // A) Fotoğrafı Yükle
       final ref = FirebaseStorage.instance
           .ref()
           .child("scan_history")
@@ -168,8 +131,8 @@ class _ScanPageState extends State<ScanPage> {
       await ref.putFile(_image!);
       final scanImageUrl = await ref.getDownloadURL();
 
-      final historyId =
-          FirebaseFirestore.instance.collection("scan_history").doc().id;
+      // B) Firestore'a 'scan_history' Kaydı At
+      final historyId = FirebaseFirestore.instance.collection("scan_history").doc().id;
 
       final history = ScanHistory(
         id: historyId,
@@ -184,19 +147,49 @@ class _ScanPageState extends State<ScanPage> {
           .doc(historyId)
           .set(history.toMap());
 
-      // Sonuç ekranına git
-      context.push("/result", extra: {
-        "dog": bestMatch,
-        "score": bestScore,
-        "image": _image,
-      });
+      // ---------------------------------------------------------
+
+      // 4) YÖNLENDİRME MANTIĞI
+      // Test için eşik değerini 0.0 yaptık (Her şeyi kabul etsin diye)
+      const matchThreshold = 0.0; 
+
+      if (lostDogId != null) {
+        // 💛 KAYIP KÖPEK MODU
+        if (bestScore >= matchThreshold) {
+          // Bulundu olarak işaretle
+          await FirebaseFirestore.instance
+              .collection("lost_dogs") // Koleksiyon adı doğru: lost_dogs
+              .doc(lostRecordId)
+              .update({
+            "found": true,
+            "foundAt": DateTime.now().toIso8601String(), // Tarihi String olarak sakla
+            "matchedDogId": bestMatch.id,
+          });
+
+          context.push("/found", extra: bestMatch);
+        } else {
+          context.push("/not-found");
+        }
+      } else {
+        // 💙 NORMAL MOD
+        context.push("/result", extra: {
+          "dog": bestMatch,
+          "score": bestScore,
+          "image": _image,
+        });
+      }
+
+    } catch (e) {
+      debugPrint("Hata: $e");
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Bir hata oluştu: $e")),
+      );
     } finally {
       if (mounted) {
         setState(() => _isScanning = false);
       }
     }
   }
-
   // -----------------------
   // COSINE SIMILARITY
   // -----------------------

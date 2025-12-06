@@ -185,6 +185,7 @@ onPressed: () async {
 
             const SizedBox(height: 12),
 
+          // ...
             // TARİHÇE LİSTESİ
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -193,7 +194,23 @@ onPressed: () async {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                if (!snapshot.hasData) {
+                // 1. HATA VARSA GÖSTER (Burası çok önemli!)
+                if (snapshot.hasError) {
+                  debugPrint("Hata Detayı: ${snapshot.error}"); // Konsola yaz
+                  return Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: Text(
+                        "Bir sorun oluştu:\n${snapshot.error}",
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(color: Colors.red),
+                      ),
+                    ),
+                  );
+                }
+
+                // 2. YÜKLENİYORSA
+                if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: Padding(
                       padding: EdgeInsets.all(40),
@@ -202,18 +219,20 @@ onPressed: () async {
                   );
                 }
 
-                final docs = snapshot.data!.docs;
+                final docs = snapshot.data?.docs ?? [];
 
+                // 3. VERİ YOKSA
                 if (docs.isEmpty) {
                   return const Padding(
-                    padding: EdgeInsets.only(top: 8),
+                    padding: EdgeInsets.only(top: 20),
                     child: Text(
-                      "Bu köpek için geçmiş tarama yok.",
-                      style: TextStyle(color: Colors.grey),
+                      "Bu köpek için henüz geçmiş tarama yok.",
+                      style: TextStyle(color: Colors.grey, fontSize: 16),
                     ),
                   );
                 }
 
+                // 4. LİSTELE
                 return Column(
                   children: docs
                       .map((d) => HistoryCard(
@@ -224,6 +243,9 @@ onPressed: () async {
                 );
               },
             ),
+// ...
+          
+          
           ],
         ),
       ),
