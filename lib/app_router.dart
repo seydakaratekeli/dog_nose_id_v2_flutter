@@ -59,14 +59,16 @@ final appRouter = GoRouter(
       builder: (context, state) => const AddDogPage(),
     ),
 
-        // MAP (dogId gerekli!)
-        GoRoute(
-          path: '/map',
-          builder: (context, state) {
-            final dogId = state.extra as String;
-            return LostMapPage(dogId: dogId);
-          },
-        ),
+       // lib/app_router.dart dosyasındaki '/map' rotasını bul ve şöyle değiştir:
+
+GoRoute(
+  path: '/map',
+  builder: (context, state) {
+    // Eğer extra null ise boş string ata, çökmesini engelle
+    final dogId = (state.extra as String?) ?? ''; 
+    return LostMapPage(dogId: dogId);
+  },
+),
 
         // PROFILE
         GoRoute(
