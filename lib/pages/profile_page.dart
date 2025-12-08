@@ -2,6 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
+import 'package:provider/provider.dart';
+import '../theme/theme_provider.dart';
 
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
@@ -12,7 +14,9 @@ class ProfilePage extends StatefulWidget {
 
 class _ProfilePageState extends State<ProfilePage> {
   String? email;
+  String displayName = "Kullanıcı"; // Varsayılan isim
   int dogCount = 0;
+  int lostCount = 0;
   bool loading = true;
 
   @override
@@ -21,27 +25,43 @@ class _ProfilePageState extends State<ProfilePage> {
     _loadProfileData();
   }
 
+  // Profil verilerini çek (Sayfa her açıldığında tetiklenmeli)
   Future<void> _loadProfileData() async {
     final user = FirebaseAuth.instance.currentUser;
     email = user?.email;
-
-    // Kayıtlı köpek sayısını çek
     final uid = user?.uid;
 
     if (uid != null) {
+      // 1. Kullanıcı Bilgilerini Çek (Ad Soyad için)
+      final userDoc = await FirebaseFirestore.instance.collection('users').doc(uid).get();
+      if (userDoc.exists) {
+        setState(() {
+          displayName = userDoc.data()?['displayName'] ?? "Kullanıcı";
+        });
+      }
+
+      // 2. Köpek Sayısını Çek
       final dogs = await FirebaseFirestore.instance
           .collection("users")
           .doc(uid)
           .collection("dogs")
           .get();
 
-      dogCount = dogs.docs.length;
-    }
+      // 3. Kayıp Bildirim Sayısını Çek
+      final lostDogs = await FirebaseFirestore.instance
+          .collection("lost_dogs")
+          .where('userId', isEqualTo: uid)
+          .get();
 
-    if (mounted) {
-      setState(() {
-        loading = false;
-      });
+      if (mounted) {
+        setState(() {
+          dogCount = dogs.docs.length;
+          lostCount = lostDogs.docs.length;
+          loading = false;
+        });
+      }
+    } else {
+        if (mounted) setState(() => loading = false);
     }
   }
 
@@ -66,7 +86,6 @@ class _ProfilePageState extends State<ProfilePage> {
       appBar: AppBar(title: const Text("Profilim")),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
-
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -76,17 +95,45 @@ class _ProfilePageState extends State<ProfilePage> {
             Center(
               child: Column(
                 children: [
-                  CircleAvatar(
-                    radius: 48,
-                    backgroundColor: theme.colorScheme.primaryContainer,
-                    child: const Icon(Icons.person, size: 50),
+                  Stack(
+                    children: [
+                      CircleAvatar(
+                        radius: 48,
+                        backgroundColor: theme.colorScheme.primaryContainer,
+                        child: Icon(Icons.person, size: 50, color: theme.colorScheme.onPrimaryContainer),
+                      ),
+                      // DÜZENLEME BUTONU (Kalem ikonu)
+                      Positioned(
+                        bottom: 0,
+                        right: 0,
+                        child: GestureDetector(
+                          onTap: () async {
+                            // Düzenleme sayfasına git ve dönünce verileri yenile
+                            await context.push("/edit-profile");
+                            _loadProfileData(); 
+                          },
+                          child: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: const BoxDecoration(
+                              color: Colors.blue,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(Icons.edit, size: 18, color: Colors.white),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
 
                   Text(
-                    email ?? "Bilinmeyen Kullanıcı",
+                    displayName, // Artık isim görünüyor
                     style: theme.textTheme.titleLarge
                         ?.copyWith(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    email ?? "",
+                    style: theme.textTheme.bodyMedium?.copyWith(color: Colors.grey),
                   ),
                 ],
               ),
@@ -102,15 +149,13 @@ class _ProfilePageState extends State<ProfilePage> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(14),
               ),
-
               child: Padding(
                 padding: const EdgeInsets.all(16),
-
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     _buildStat("Kayıtlı Köpek", dogCount.toString(), Icons.pets),
-                    _buildStat("Kayıp Bildirim", "0", Icons.warning_amber),
+                    _buildStat("Kayıp Bildirim", lostCount.toString(), Icons.warning_amber),
                   ],
                 ),
               ),
@@ -136,29 +181,28 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
 
             _buildMenuItem(
-              icon: Icons.history_edu, // Veya Icons.assignment
+              icon: Icons.history_edu,
               title: "İlanlarım ve Bildirimlerim",
               onTap: () => context.push("/my-reports"), 
             ),
 
-
-
             _buildMenuItem(
               icon: Icons.color_lens_outlined,
-              title: "Tema Değiştir",
-              onTap: () {
-                // Tema sistemi sana bağlı – istersen buradan trigger edebiliriz
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text("Tema fonksiyonu eklenmedi.")),
-                );
-              },
+              title: "Karanlık Mod",
+              trailing: Consumer<ThemeProvider>(
+                builder: (context, themeProvider, child) {
+                  return Switch(
+                    value: themeProvider.isDarkMode,
+                    onChanged: (value) {
+                      themeProvider.toggleTheme(value);
+                    },
+                  );
+                },
+              ),
+              onTap: () {}, // Switch kullanıldığı için boş kalabilir
             ),
 
-            _buildMenuItem(
-              icon: Icons.info_outline,
-              title: "Hakkında",
-              onTap: () {},
-            ),
+            // "Hakkında" butonu SİLİNDİ ❌
 
             const SizedBox(height: 20),
 
@@ -171,8 +215,9 @@ class _ProfilePageState extends State<ProfilePage> {
                 icon: const Icon(Icons.logout),
                 label: const Text("Çıkış Yap"),
                 style: ElevatedButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+                  backgroundColor: Colors.red.shade50,
+                  foregroundColor: Colors.red,
                 ),
               ),
             ),
@@ -182,13 +227,11 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // -----------------------------------
   // ISTATISTIK KARTI WIDGET
-  // -----------------------------------
   Widget _buildStat(String title, String value, IconData icon) {
     return Column(
       children: [
-        Icon(icon, size: 34),
+        Icon(icon, size: 34, color: Colors.blueAccent),
         const SizedBox(height: 6),
         Text(
           value,
@@ -197,26 +240,25 @@ class _ProfilePageState extends State<ProfilePage> {
             fontWeight: FontWeight.bold,
           ),
         ),
-        Text(title),
+        Text(title, style: const TextStyle(color: Colors.grey)),
       ],
     );
   }
 
-  // -----------------------------------
   // MENU ITEM WIDGET
-  // -----------------------------------
   Widget _buildMenuItem({
     required IconData icon,
     required String title,
     required VoidCallback onTap,
+    Widget? trailing, // Opsiyonel parametre
   }) {
     return Card(
       margin: const EdgeInsets.only(bottom: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: ListTile(
-        leading: Icon(icon, size: 28),
+        leading: Icon(icon, size: 28, color: Colors.grey.shade700),
         title: Text(title),
-        trailing: const Icon(Icons.chevron_right),
+        trailing: trailing ?? const Icon(Icons.chevron_right),
         onTap: onTap,
       ),
     );

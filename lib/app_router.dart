@@ -20,6 +20,8 @@ import 'main_shell.dart';
 import 'pages/report_found_dog_page.dart';
 import 'pages/my_reports_page.dart';
 import 'pages/found_dog_detail_page.dart';
+import 'pages/edit_profile_page.dart';
+
 // Models
 import 'models/dog.dart';
 
@@ -61,6 +63,12 @@ final appRouter = GoRouter(
       builder: (context, state) => const AddDogPage(),
     ),
 
+// PROFİL DÜZENLEME
+    GoRoute(
+      path: '/edit-profile',
+      builder: (context, state) => const EditProfilePage(),
+    ),
+    
 GoRoute(
   path: '/map',
   builder: (context, state) {
@@ -117,7 +125,7 @@ GoRoute(
         return FoundDogDetailPage(data: data);
       },
     ),
-    
+
 GoRoute(
   path: '/not-found',
   builder: (context, state) => const NotFoundPage(),
