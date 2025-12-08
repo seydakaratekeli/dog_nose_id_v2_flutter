@@ -2,8 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import 'package:cached_network_image/cached_network_image.dart'; // 📦 PAKET EKLENDİ
-
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/dog.dart';
 
 class HomePage extends StatefulWidget {
@@ -19,10 +18,8 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   @override
   void initState() {
     super.initState();
-    // 2 Sekmeli Kontrolcü: [Kayıp İlanları, Görülenler]
     _tabController = TabController(length: 2, vsync: this);
     
-    // Sekme değiştiğinde FloatingActionButton'ı güncellemek için dinleyici
     _tabController.addListener(() {
       if (!_tabController.indexIsChanging) {
         setState(() {});
@@ -34,48 +31,6 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
   void dispose() {
     _tabController.dispose();
     super.dispose();
-  }
-
-  // ----------------------------------------------------
-  // STREAM 1: KAYIP KÖPEKLER (Sahipli ama kayıp)
-  // ----------------------------------------------------
-  Stream<List<Map<String, dynamic>>> _lostDogsStream() {
-    return FirebaseFirestore.instance
-        .collection('lost_dogs')
-        .orderBy('timestamp', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
-  }
-
-  // ----------------------------------------------------
-  // STREAM 2: GÖRÜLEN KÖPEKLER (Sahipsiz/Bilinmeyen)
-  // ----------------------------------------------------
-  Stream<List<Map<String, dynamic>>> _foundDogsStream() {
-    return FirebaseFirestore.instance
-        .collection('found_dogs')
-        .orderBy('timestamp', descending: true)
-        .snapshots()
-        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
-  }
-
-  // Yardımcı: Sahipli köpeğin detayını çek (Kayıp ilanları için)
-  Future<Dog?> _getDog(String? dogId, String? ownerId) async {
-    if (dogId == null || ownerId == null) return null;
-    try {
-      final doc = await FirebaseFirestore.instance
-          .collection('users')
-          .doc(ownerId)
-          .collection('dogs')
-          .doc(dogId)
-          .get();
-
-      if (doc.exists) {
-        return Dog.fromMap(doc.data()!);
-      }
-    } catch (e) {
-      debugPrint("Köpek verisi hatası: $e");
-    }
-    return null;
   }
 
   @override
@@ -112,14 +67,11 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         ),
       ),
 
-      // Sekmeye göre değişen dinamik buton
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           if (_tabController.index == 1) {
-            // Görülenler sekmesindeysek -> Bildirim Yap
             context.push('/report-found');
           } else {
-            // Kayıplar sekmesindeysek -> Kendi köpeğini ekle
             context.push('/add-dog');
           }
         },
@@ -131,21 +83,35 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
       body: TabBarView(
         controller: _tabController,
-        children: [
-          // 1. SEKME: KAYIP LİSTESİ
-          _buildLostDogsList(),
-
-          // 2. SEKME: GÖRÜLENLER LİSTESİ
-          _buildFoundDogsList(),
+        children: const [
+          // Optimize edilmiş, durumu koruyan sekmeler
+          LostDogsTab(),
+          FoundDogsTab(),
         ],
       ),
     );
   }
+}
 
-  // =================================================================
-  // WIDGET: KAYIP LİSTESİ YAPISI
-  // =================================================================
-  Widget _buildLostDogsList() {
+// =================================================================
+// 1. SEKME: KAYIP LİSTESİ (Durumunu Koruyan Widget)
+// =================================================================
+class LostDogsTab extends StatefulWidget {
+  const LostDogsTab({super.key});
+
+  @override
+  State<LostDogsTab> createState() => _LostDogsTabState();
+}
+
+class _LostDogsTabState extends State<LostDogsTab> with AutomaticKeepAliveClientMixin {
+  // Bu mixin sayesinde sekme değişse bile liste yeniden yüklenmez
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // Mixin için gerekli
+
     return Column(
       children: [
         // Hızlı Erişim Butonları
@@ -181,51 +147,67 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
         ),
 
         Expanded(
-          child: StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _lostDogsStream(),
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('lost_dogs')
+                .orderBy('timestamp', descending: true)
+                .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final list = snapshot.data ?? [];
-              if (list.isEmpty) {
+              
+              final docs = snapshot.data?.docs ?? [];
+              
+              if (docs.isEmpty) {
                 return _buildEmptyState("Şu an kayıp ilanı yok.", Icons.thumb_up_alt_outlined);
               }
 
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
-                itemCount: list.length,
+                itemCount: docs.length,
                 itemBuilder: (context, index) {
-                  final item = list[index];
-                  final ownerId = item["ownerId"] ?? item["userId"]; 
-                  final dogId = item["dogId"];
+                  final data = docs[index].data() as Map<String, dynamic>;
+                  
+                  // OPTİMİZASYON: Artık _getDog ile tekrar sorgu yapmıyoruz!
+                  // lost_dogs koleksiyonuna kaydettiğimiz verileri doğrudan kullanıyoruz.
+                  
+                  // Eğer eski veri ise (resim yoksa) placeholder gösterelim
+                  final imageUrl = data['dogImage'] ?? data['imageUrl'] ?? '';
+                  final name = data['dogName'] ?? 'İsimsiz';
+                  final breed = data['dogBreed'] ?? 'Irkı Bilinmiyor';
+                  final address = data['address'] ?? 'Konum bilgisi yok';
+                  final age = data['dogAge'] ?? '?'; // Eğer kaydettiyseniz
 
-                  if (ownerId == null || dogId == null) return const SizedBox();
+                  // Dog nesnesini detay sayfası için manuel oluşturuyoruz
+                  // (Tam veri olmadığı için sadece görüntüleme amaçlı)
+                  final simpleDog = Dog(
+                    id: data['dogId'] ?? '',
+                    name: name,
+                    breed: breed,
+                    age: 0, // Listeden yaş gelmiyorsa varsayılan
+                    imageUrl: imageUrl,
+                    embedding: [], 
+                    ownerPhone: data['ownerPhone'] ?? '',
+                  );
 
-                  return FutureBuilder<Dog?>(
-                    future: _getDog(dogId, ownerId),
-                    builder: (context, dogSnap) {
-                      if (!dogSnap.hasData) return const SizedBox();
-                      final dog = dogSnap.data!;
-                      final address = item['address'] ?? "Konum bilgisi yok";
-
-                      return Card(
-                        elevation: 3,
-                        margin: const EdgeInsets.only(bottom: 16),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
-                          side: BorderSide(color: Colors.red.shade200, width: 1),
-                        ),
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16),
-                          onTap: () => context.push('/dog-detail', extra: dog),
-                          child: Column(
-                            children: [
-                              // ⚡ CACHED IMAGE KULLANIMI
-                              ClipRRect(
-                                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                                child: CachedNetworkImage(
-                                  imageUrl: dog.imageUrl,
+                  return Card(
+                    elevation: 3,
+                    margin: const EdgeInsets.only(bottom: 16),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(16),
+                      side: BorderSide(color: Colors.red.shade200, width: 1),
+                    ),
+                    child: InkWell(
+                      onTap: () => context.push('/dog-detail', extra: simpleDog),
+                      borderRadius: BorderRadius.circular(16),
+                      child: Column(
+                        children: [
+                          ClipRRect(
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                            child: imageUrl.isNotEmpty 
+                              ? CachedNetworkImage(
+                                  imageUrl: imageUrl,
                                   height: 150,
                                   width: double.infinity,
                                   fit: BoxFit.cover,
@@ -239,42 +221,46 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                                     color: Colors.grey.shade200,
                                     child: const Icon(Icons.pets, color: Colors.grey, size: 50),
                                   ),
+                                )
+                              : Container(
+                                  height: 150,
+                                  width: double.infinity,
+                                  color: Colors.grey.shade300,
+                                  child: const Icon(Icons.image_not_supported),
                                 ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(12.0),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                          ),
+                          Padding(
+                            padding: const EdgeInsets.all(12.0),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                   children: [
-                                    Row(
-                                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                      children: [
-                                        Text(dog.name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                          decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
-                                          child: const Text("KAYIP", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                        ),
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text("${dog.breed} • ${dog.age} Yaş", style: TextStyle(color: Colors.grey[700])),
-                                    const SizedBox(height: 8),
-                                    Row(
-                                      children: [
-                                        const Icon(Icons.location_on, size: 16, color: Colors.grey),
-                                        const SizedBox(width: 4),
-                                        Expanded(child: Text(address, style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                      ],
+                                    Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
+                                      child: const Text("KAYIP", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 4),
+                                Text("$breed", style: TextStyle(color: Colors.grey[700])),
+                                const SizedBox(height: 8),
+                                Row(
+                                  children: [
+                                    const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                                    const SizedBox(width: 4),
+                                    Expanded(child: Text(address, style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                                  ],
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      );
-                    },
+                        ],
+                      ),
+                    ),
                   );
                 },
               );
@@ -284,11 +270,26 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       ],
     );
   }
+}
 
-  // =================================================================
-  // WIDGET: GÖRÜLENLER LİSTESİ YAPISI
-  // =================================================================
-  Widget _buildFoundDogsList() {
+// =================================================================
+// 2. SEKME: GÖRÜLENLER LİSTESİ (Durumunu Koruyan Widget)
+// =================================================================
+class FoundDogsTab extends StatefulWidget {
+  const FoundDogsTab({super.key});
+
+  @override
+  State<FoundDogsTab> createState() => _FoundDogsTabState();
+}
+
+class _FoundDogsTabState extends State<FoundDogsTab> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true; // Sekme değişse de canlı tut
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // Mixin
+
     return Column(
       children: [
         Container(
@@ -298,7 +299,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
             children: [
               const Icon(Icons.info_outline, color: Colors.orange),
               const SizedBox(width: 8),
-              const Expanded(child: Text("Sokakta sahipsiz bir köpek mi gördün? Hemen bildir!", style: TextStyle(fontSize: 12))),
+              const Expanded(child: Text("Sokakta sahipsiz bir köpek mi gördün?", style: TextStyle(fontSize: 12))),
               TextButton(
                 onPressed: () => context.push('/report-found'),
                 child: const Text("BİLDİR"),
@@ -307,22 +308,25 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
           ),
         ),
         Expanded(
-          child: StreamBuilder<List<Map<String, dynamic>>>(
-            stream: _foundDogsStream(),
+          child: StreamBuilder<QuerySnapshot>(
+            stream: FirebaseFirestore.instance
+                .collection('found_dogs')
+                .orderBy('timestamp', descending: true)
+                .snapshots(),
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
-              final list = snapshot.data ?? [];
-              if (list.isEmpty) {
+              final docs = snapshot.data?.docs ?? [];
+              if (docs.isEmpty) {
                 return _buildEmptyState("Henüz bildirim yapılmamış.", Icons.visibility_off_outlined);
               }
 
               return ListView.builder(
                 padding: const EdgeInsets.all(12),
-                itemCount: list.length,
+                itemCount: docs.length,
                 itemBuilder: (context, index) {
-                  final item = list[index];
+                  final item = docs[index].data() as Map<String, dynamic>;
                   
                   return Card(
                     elevation: 2,
@@ -333,12 +337,9 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
                     ),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      onTap: () {
-                        context.push('/found-dog-detail', extra: item);
-                      },
+                      onTap: () => context.push('/found-dog-detail', extra: item),
                       child: Column(
                         children: [
-                          // ⚡ CACHED IMAGE KULLANIMI
                           Hero(
                             tag: item['imageUrl'] ?? 'no_img_$index', 
                             child: ClipRRect(
@@ -402,17 +403,18 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
       ],
     );
   }
+}
 
-  Widget _buildEmptyState(String message, IconData icon) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(icon, size: 64, color: Colors.grey[300]),
-          const SizedBox(height: 16),
-          Text(message, style: const TextStyle(fontSize: 16, color: Colors.grey)),
-        ],
-      ),
-    );
-  }
+// Yardımcı Fonksiyon
+Widget _buildEmptyState(String message, IconData icon) {
+  return Center(
+    child: Column(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        Icon(icon, size: 64, color: Colors.grey[300]),
+        const SizedBox(height: 16),
+        Text(message, style: const TextStyle(fontSize: 16, color: Colors.grey)),
+      ],
+    ),
+  );
 }
