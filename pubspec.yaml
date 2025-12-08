@@ -42,7 +42,7 @@ dependencies:
   image_picker: ^1.2.1
   google_maps_flutter: ^2.14.0
   geolocator: ^14.0.2
-
+  camera: ^0.10.5 # Sürüm numarasını kontrol edebilirsiniz
 dev_dependencies:
   flutter_test:
     sdk: flutter

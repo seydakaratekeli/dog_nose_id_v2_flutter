@@ -132,7 +132,7 @@ class _ProfilePageState extends State<ProfilePage> {
             _buildMenuItem(
               icon: Icons.list_alt,
               title: "Köpeklerim",
-              onTap: () => context.go("/home"), // HomePage’de liste var
+              onTap: () => context.push("/my-dogs"), 
             ),
 
             _buildMenuItem(

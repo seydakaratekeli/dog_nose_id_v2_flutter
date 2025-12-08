@@ -15,7 +15,7 @@ import 'pages/edit_dog_page.dart';
 import 'pages/lost_dog_list_page.dart';
 import 'pages/found_status_page.dart';
 import 'pages/not_found_page.dart';
-
+import 'pages/my_dogs_page.dart';
 import 'main_shell.dart';
 
 // Models
@@ -59,6 +59,9 @@ final appRouter = GoRouter(
       builder: (context, state) => const AddDogPage(),
     ),
 
+   
+
+
        // lib/app_router.dart dosyasındaki '/map' rotasını bul ve şöyle değiştir:
 
 GoRoute(
@@ -74,6 +77,11 @@ GoRoute(
         GoRoute(
           path: '/profile',
           builder: (context, state) => const ProfilePage(),
+        ),
+
+         GoRoute(
+          path: '/my-dogs', // Yeni rota adresimiz
+          builder: (context, state) => const MyDogsPage(),
         ),
 
         // DOG DETAIL

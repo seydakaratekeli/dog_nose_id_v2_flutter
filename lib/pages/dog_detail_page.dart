@@ -2,7 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../widgets/report_lost_dog_dialog.dart';
+// import '../widgets/report_lost_dog_dialog.dart'; // Artık diyaloğu kullanmıyoruz, gerekirse silebilirsiniz
 import '../models/dog.dart';
 import '../models/scan_history.dart';
 import '../widgets/history_card.dart';
@@ -26,7 +26,7 @@ class _DogDetailPageState extends State<DogDetailPage> {
     _checkLostStatus();
   }
 
-  // Kayıp kontrol
+  // Kayıp durumunu kontrol et
   Future<void> _checkLostStatus() async {
     final snap = await FirebaseFirestore.instance
         .collection("lost_dogs")
@@ -35,13 +35,16 @@ class _DogDetailPageState extends State<DogDetailPage> {
         .get();
 
     if (snap.docs.isNotEmpty) {
-      setState(() {
-        _isLost = true;
-        _lostRecordId = snap.docs.first.id;
-      });
+      if (mounted) {
+        setState(() {
+          _isLost = true;
+          _lostRecordId = snap.docs.first.id;
+        });
+      }
     }
   }
 
+  // Bulundu taramasına git
   void _scanForFound() {
     context.push("/scan", extra: {
       "lostDogId": widget.dog.id,
@@ -61,13 +64,11 @@ class _DogDetailPageState extends State<DogDetailPage> {
           ),
         ],
       ),
-
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-
             // FOTOĞRAF
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
@@ -76,6 +77,11 @@ class _DogDetailPageState extends State<DogDetailPage> {
                 width: double.infinity,
                 height: 260,
                 fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Container(
+                  height: 260,
+                  color: Colors.grey.shade300,
+                  child: const Center(child: Icon(Icons.pets, size: 50)),
+                ),
               ),
             ),
 
@@ -140,21 +146,23 @@ class _DogDetailPageState extends State<DogDetailPage> {
               children: [
                 Expanded(
                   child: ElevatedButton.icon(
-                   // Eski kod: context.push("/map", extra: widget.dog.id),
-// Yeni kod:
-onPressed: () async {
-  // Diyaloğu açıyoruz ve bitmesini bekliyoruz
-  final result = await showDialog(
-    context: context,
-    builder: (context) => ReportLostDogDialog(dog: widget.dog),
-  );
-
-  // Eğer işlem başarılıysa (true döndüyse) sayfayı yenile
-  if (result == true) {
-    _checkLostStatus();
-  }
-}, icon: const Icon(Icons.location_off),
+                    // DÜZELTİLEN KISIM BURASI
+                    onPressed: () {
+                      // Diyalog yerine harita sayfasına gidiyoruz.
+                      // 'extra' parametresi ile hangi köpeğin kayıp olduğunu bildiriyoruz.
+                      context.push("/map", extra: widget.dog.id).then((_) {
+                        // Haritadan geri gelindiğinde durumu tekrar kontrol et
+                        // (Kayıp ilanı verildiyse arayüz güncellensin)
+                        _checkLostStatus();
+                      });
+                    },
+                    icon: const Icon(Icons.location_off),
                     label: const Text("Kayıp Olarak İşaretle"),
+                    style: ElevatedButton.styleFrom(
+                      // Butonu biraz daha dikkat çekici yapabiliriz (Opsiyonel)
+                      backgroundColor: Colors.red.shade50,
+                      foregroundColor: Colors.red.shade900,
+                    ),
                   ),
                 ),
                 const SizedBox(width: 12),
@@ -166,6 +174,7 @@ onPressed: () async {
                     style: ElevatedButton.styleFrom(
                       backgroundColor:
                           _isLost ? Colors.green : Colors.grey.shade400,
+                      foregroundColor: Colors.white,
                     ),
                   ),
                 ),
@@ -185,7 +194,6 @@ onPressed: () async {
 
             const SizedBox(height: 12),
 
-          // ...
             // TARİHÇE LİSTESİ
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
@@ -194,9 +202,7 @@ onPressed: () async {
                   .orderBy('timestamp', descending: true)
                   .snapshots(),
               builder: (context, snapshot) {
-                // 1. HATA VARSA GÖSTER (Burası çok önemli!)
                 if (snapshot.hasError) {
-                  debugPrint("Hata Detayı: ${snapshot.error}"); // Konsola yaz
                   return Center(
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
@@ -209,7 +215,6 @@ onPressed: () async {
                   );
                 }
 
-                // 2. YÜKLENİYORSA
                 if (snapshot.connectionState == ConnectionState.waiting) {
                   return const Center(
                     child: Padding(
@@ -221,7 +226,6 @@ onPressed: () async {
 
                 final docs = snapshot.data?.docs ?? [];
 
-                // 3. VERİ YOKSA
                 if (docs.isEmpty) {
                   return const Padding(
                     padding: EdgeInsets.only(top: 20),
@@ -232,7 +236,6 @@ onPressed: () async {
                   );
                 }
 
-                // 4. LİSTELE
                 return Column(
                   children: docs
                       .map((d) => HistoryCard(
@@ -243,9 +246,9 @@ onPressed: () async {
                 );
               },
             ),
-// ...
-          
-          
+            
+            // Sayfa sonu boşluğu
+            const SizedBox(height: 40),
           ],
         ),
       ),
