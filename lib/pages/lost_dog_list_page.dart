@@ -1,7 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-import '../components/model_warning.dart';
+import 'package:cached_network_image/cached_network_image.dart'; // 📦 Paket import edildi
 import '../models/dog.dart';
 
 class LostDogListPage extends StatelessWidget {
@@ -44,9 +44,6 @@ class LostDogListPage extends StatelessWidget {
 
       body: Column(
         children: [
-          // Model uyarısı (İsteğe bağlı)
-          // const ModelWarning(), 
-          
           Expanded(
             child: StreamBuilder<List<Map<String, dynamic>>>(
               stream: _lostDogsStream(),
@@ -76,19 +73,17 @@ class LostDogListPage extends StatelessWidget {
                   itemBuilder: (context, index) {
                     final item = lostList[index];
 
-                    // 1. SORUNUN ÇÖZÜMÜ: Anahtar isimlerini güncelledik ve yedekledik
-                    // Yeni kodda 'ownerId', eski kodda 'userId' olabilir. İkisini de dene.
+                    // ID Kontrolleri
                     final ownerId = item["ownerId"] ?? item["userId"];
                     final dogId = item["dogId"];
                     
-                    // Konum verilerini güvenli alalım (double'a çevirerek)
+                    // Konum verilerini güvenli alalım
                     final rawLat = item["latitude"] ?? item["lat"];
                     final rawLng = item["longitude"] ?? item["lng"];
                     
                     final double lat = (rawLat is num) ? rawLat.toDouble() : 0.0;
                     final double lng = (rawLng is num) ? rawLng.toDouble() : 0.0;
 
-                    // Eğer köpeğin sahibi veya ID'si yoksa gösterme
                     if (ownerId == null || dogId == null) {
                       return const SizedBox();
                     }
@@ -104,7 +99,6 @@ class LostDogListPage extends StatelessWidget {
                         }
 
                         if (!dogSnap.hasData || dogSnap.data == null) {
-                          // Köpek silinmiş olabilir, boş kart gösterme
                           return const SizedBox();
                         }
 
@@ -119,20 +113,31 @@ class LostDogListPage extends StatelessWidget {
                           child: ListTile(
                             contentPadding: const EdgeInsets.all(10),
                             onTap: () {
-      // Köpeğin detay sayfasına git ve 'dog' nesnesini gönder
-      context.push("/dog-detail", extra: dog);
-    },
+                              context.push("/dog-detail", extra: dog);
+                            },
 
-
-
+                            // ⚡ CACHED IMAGE OPTİMİZASYONU BURADA
                             leading: ClipRRect(
                               borderRadius: BorderRadius.circular(8),
-                              child: Image.network(
-                                dog.imageUrl,
+                              child: CachedNetworkImage(
+                                imageUrl: dog.imageUrl,
                                 width: 60,
                                 height: 60,
                                 fit: BoxFit.cover,
-                                errorBuilder: (c, e, s) => const Icon(Icons.pets, size: 40),
+                                // Yüklenirken gösterilecek (Placeholder)
+                                placeholder: (context, url) => Container(
+                                  width: 60, 
+                                  height: 60, 
+                                  color: Colors.grey[200],
+                                  child: const Icon(Icons.downloading, size: 20, color: Colors.grey),
+                                ),
+                                // Hata durumunda gösterilecek (Error)
+                                errorWidget: (context, url, error) => Container(
+                                  width: 60, 
+                                  height: 60, 
+                                  color: Colors.grey[200],
+                                  child: const Icon(Icons.pets, size: 30, color: Colors.grey),
+                                ),
                               ),
                             ),
 
@@ -161,9 +166,6 @@ class LostDogListPage extends StatelessWidget {
                               icon: const Icon(Icons.map_outlined, color: Colors.blue),
                               tooltip: "Konumu Gör",
                               onPressed: () {
-                                // Harita sayfasına sadece 'dogId' gönderiyoruz, 
-                                // ama harita sayfası bu köpeğin kayıp kaydını bulmak zorunda kalabilir.
-                                // Şimdilik mevcut akışına uyalım.
                                 context.push("/map", extra: dog.id);
                               },
                             ),

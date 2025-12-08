@@ -1,13 +1,14 @@
 import 'dart:io';
-
-import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:firebase_storage/firebase_storage.dart';
+import 'dart:math'; // Rastgele embedding için
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:go_router/go_router.dart';
+import 'package:uuid/uuid.dart';
+
 import '../models/dog.dart';
-import '../components/model_warning.dart';
 
 class AddDogPage extends StatefulWidget {
   const AddDogPage({super.key});
@@ -17,207 +18,209 @@ class AddDogPage extends StatefulWidget {
 }
 
 class _AddDogPageState extends State<AddDogPage> {
+  // Form Kontrolcüleri
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
+  final _breedController = TextEditingController();
+  final _ageController = TextEditingController();
+  final _phoneController = TextEditingController(); // 📞 YENİ: Telefon kontrolcüsü
 
-  final nameController = TextEditingController();
-  final breedController = TextEditingController();
-  final ageController = TextEditingController();
+  File? _selectedImage;
+  bool _isLoading = false;
 
-  File? _image;
-  bool _loading = false;
-
-
- // ---------------------------------------
-  // 1) BOŞ EMBEDDING OLUŞTURAN FONKSİYON
-  // (Geçici, model gelince gerçek embedding gelecek)
-  // ---------------------------------------
-  List<double> _emptyEmbedding() {
-    return List.generate(128, (_) => 0.0);
-  }
-  
+  // Fotoğraf Seçimi
   Future<void> _pickImage() async {
     final picker = ImagePicker();
-    final picked = await picker.pickImage(source: ImageSource.gallery);
-
+    final picked = await picker.pickImage(source: ImageSource.gallery); // veya camera
     if (picked != null) {
       setState(() {
-        _image = File(picked.path);
+        _selectedImage = File(picked.path);
       });
     }
   }
 
+  // Geçici (Fake) Embedding Üretici
+  // (Yapay zeka modeli entegre edilene kadar yer tutucu)
+  List<double> _generateEmptyEmbedding() {
+    return List.filled(128, 0.0);
+  }
+
+  // Kaydetme İşlemi
   Future<void> _saveDog() async {
     if (!_formKey.currentState!.validate()) return;
-
-    if (_image == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text("Lütfen fotoğraf seç.")));
+    if (_selectedImage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Lütfen bir fotoğraf seçin.")),
+      );
       return;
     }
 
-    setState(() => _loading = true);
+    setState(() => _isLoading = true);
 
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
+      final uuid = const Uuid().v4(); // Benzersiz Köpek ID'si
 
-      /// 1) Fotoğrafı Storage'a yükle
+      // 1. Fotoğrafı Storage'a Yükle
       final storageRef = FirebaseStorage.instance
           .ref()
-          .child("dogs")
-          .child("$uid-${DateTime.now().millisecondsSinceEpoch}.jpg");
-
-      await storageRef.putFile(_image!);
+          .child("dog_images")
+          .child(uid)
+          .child("$uuid.jpg");
+      
+      await storageRef.putFile(_selectedImage!);
       final imageUrl = await storageRef.getDownloadURL();
 
-      /// 2) Dog ID oluştur
-      final dogId = FirebaseFirestore.instance
-          .collection("users")
-          .doc(uid)
-          .collection("dogs")
-          .doc()
-          .id;
+      // 2. Dog Nesnesini Oluştur
+      final newDog = Dog(
+        id: uuid,
+        name: _nameController.text.trim(),
+        breed: _breedController.text.trim(),
+        age: int.tryParse(_ageController.text.trim()) ?? 0,
+        imageUrl: imageUrl,
+        embedding: _generateEmptyEmbedding(),
+        ownerPhone: _phoneController.text.trim(), // 📞 TELEFON EKLENDİ
+      );
 
-      /// 3) Dog model oluştur
-     final dog = Dog(
-  id: dogId,
-  name: nameController.text.trim(),
-  breed: breedController.text.trim(),
-  age: int.tryParse(ageController.text.trim()) ?? 0,
-  imageUrl: imageUrl,
-  embedding: _emptyEmbedding(), // ← ZORUNLU ALAN EKLENDİ
-);
-
-
-      /// 4) Firestore'a kaydet
+      // 3. Firestore'a Kaydet
       await FirebaseFirestore.instance
           .collection("users")
           .doc(uid)
           .collection("dogs")
-          .doc(dogId)
-          .set(dog.toMap());
+          .doc(uuid)
+          .set(newDog.toMap());
 
       if (mounted) {
-        context.pop(); // Sayfayı kapat
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("${dog.name} eklendi.")),
+          const SnackBar(content: Text("Köpek başarıyla kaydedildi!")),
         );
+        context.pop(); // Sayfadan çık
       }
+
     } catch (e) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text("Hata: $e")));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text("Hata oluştu: $e")),
+      );
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-
     return Scaffold(
       appBar: AppBar(title: const Text("Köpek Ekle")),
-
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-
+        padding: const EdgeInsets.all(16),
         child: Form(
           key: _formKey,
-
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-
-               
-              // ------------------------
               // FOTOĞRAF ALANI
-              // ------------------------
-              Center(
-                child: GestureDetector(
-                  onTap: _pickImage,
-                  child: Container(
-                    height: 180,
-                    width: 180,
-                    decoration: BoxDecoration(
-                      color: Colors.grey.shade300,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: _image == null
-                        ? Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.camera_alt_outlined,
-                                  size: 50, color: Colors.grey.shade700),
-                              const SizedBox(height: 8),
-                              Text("Fotoğraf Seç",
-                                  style: TextStyle(color: Colors.grey.shade700)),
-                            ],
+              GestureDetector(
+                onTap: _pickImage,
+                child: Container(
+                  width: 150,
+                  height: 150,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade200,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: Colors.grey.shade400),
+                    image: _selectedImage != null
+                        ? DecorationImage(
+                            image: FileImage(_selectedImage!),
+                            fit: BoxFit.cover,
                           )
-                        : ClipRRect(
-                            borderRadius: BorderRadius.circular(16),
-                            child: Image.file(_image!, fit: BoxFit.cover),
-                          ),
+                        : null,
                   ),
+                  child: _selectedImage == null
+                      ? const Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.add_a_photo, size: 40, color: Colors.grey),
+                            SizedBox(height: 8),
+                            Text("Fotoğraf Seç", style: TextStyle(color: Colors.grey)),
+                          ],
+                        )
+                      : null,
                 ),
               ),
-
+              
               const SizedBox(height: 24),
 
-              // ------------------------
-              // FORM ALANLARI
-              // ------------------------
-
-              Text("Köpek Bilgileri",
-                  style: theme.textTheme.titleLarge
-                      ?.copyWith(fontWeight: FontWeight.bold)),
-              const SizedBox(height: 14),
-
+              // İSİM
               TextFormField(
-                controller: nameController,
+                controller: _nameController,
                 decoration: const InputDecoration(
-                  labelText: "Adı",
+                  labelText: "Köpeğin Adı",
+                  border: OutlineInputBorder(),
                   prefixIcon: Icon(Icons.pets),
                 ),
-                validator: (v) =>
-                    v!.isEmpty ? "Bu alan boş olamaz." : null,
+                validator: (value) => value == null || value.isEmpty ? "İsim giriniz" : null,
               ),
-              const SizedBox(height: 14),
 
-              TextFormField(
-                controller: breedController,
-                decoration: const InputDecoration(
-                  labelText: "Irkı",
-                  prefixIcon: Icon(Icons.badge_outlined),
-                ),
-              ),
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
 
+              // IRK
               TextFormField(
-                controller: ageController,
-                keyboardType: TextInputType.number,
+                controller: _breedController,
                 decoration: const InputDecoration(
-                  labelText: "Yaşı",
-                  prefixIcon: Icon(Icons.cake_outlined),
+                  labelText: "Irkı (Opsiyonel)",
+                  border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.category),
                 ),
               ),
 
-              const SizedBox(height: 30),
+              const SizedBox(height: 16),
 
-              // ------------------------
+              // YAŞ VE TELEFON YANYANA (Veya alt alta)
+              Row(
+                children: [
+                  // YAŞ
+                  Expanded(
+                    flex: 2,
+                    child: TextFormField(
+                      controller: _ageController,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(
+                        labelText: "Yaş",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.cake),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                  
+                  // 📞 TELEFON NUMARASI
+                  Expanded(
+                    flex: 3,
+                    child: TextFormField(
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone, // Sayısal klavye açar
+                      decoration: const InputDecoration(
+                        labelText: "Sahibinin Tel",
+                        hintText: "5XX...",
+                        border: OutlineInputBorder(),
+                        prefixIcon: Icon(Icons.phone),
+                      ),
+                      // İsterseniz zorunlu yapabilirsiniz:
+                      // validator: (val) => val!.isEmpty ? "Telefon giriniz" : null,
+                    ),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 32),
+
               // KAYDET BUTONU
-              // ------------------------
               SizedBox(
                 width: double.infinity,
+                height: 50,
                 child: ElevatedButton(
-                  onPressed: _loading ? null : _saveDog,
-                  child: _loading
-                      ? const SizedBox(
-                          width: 24,
-                          height: 24,
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                            color: Colors.white,
-                          ))
-                      : const Text("Kaydet"),
+                  onPressed: _isLoading ? null : _saveDog,
+                  child: _isLoading
+                      ? const CircularProgressIndicator(color: Colors.white)
+                      : const Text("KAYDET", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
                 ),
               ),
             ],

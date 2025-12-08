@@ -17,7 +17,9 @@ import 'pages/found_status_page.dart';
 import 'pages/not_found_page.dart';
 import 'pages/my_dogs_page.dart';
 import 'main_shell.dart';
-
+import 'pages/report_found_dog_page.dart';
+import 'pages/my_reports_page.dart';
+import 'pages/found_dog_detail_page.dart';
 // Models
 import 'models/dog.dart';
 
@@ -59,11 +61,6 @@ final appRouter = GoRouter(
       builder: (context, state) => const AddDogPage(),
     ),
 
-   
-
-
-       // lib/app_router.dart dosyasındaki '/map' rotasını bul ve şöyle değiştir:
-
 GoRoute(
   path: '/map',
   builder: (context, state) {
@@ -83,6 +80,11 @@ GoRoute(
           path: '/my-dogs', // Yeni rota adresimiz
           builder: (context, state) => const MyDogsPage(),
         ),
+
+        GoRoute(
+  path: '/my-reports',
+  builder: (context, state) => const MyReportsPage(),
+),
 
         // DOG DETAIL
         GoRoute(
@@ -106,10 +108,25 @@ GoRoute(
   },
 ),
 
+// FOUND DOG DETAIL
+    GoRoute(
+      path: '/found-dog-detail',
+      builder: (context, state) {
+        // Veriyi Map olarak alıyoruz
+        final data = state.extra as Map<String, dynamic>;
+        return FoundDogDetailPage(data: data);
+      },
+    ),
+    
 GoRoute(
   path: '/not-found',
   builder: (context, state) => const NotFoundPage(),
 ),
+
+GoRoute(
+      path: '/report-found',
+      builder: (context, state) => const ReportFoundDogPage(),
+    ),
 
         // EDIT DOG
         GoRoute(

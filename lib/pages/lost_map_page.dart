@@ -4,9 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:geocoding/geocoding.dart';
 
 class LostMapPage extends StatefulWidget {
-  final String dogId; // Boş gelirse "Gezinme Modu", dolu gelirse "Rapor Modu"
+  final String dogId; 
 
   const LostMapPage({super.key, required this.dogId});
 
@@ -19,22 +20,24 @@ class _LostMapPageState extends State<LostMapPage> {
   final TextEditingController _noteController = TextEditingController();
 
   LatLng? _currentCenterPosition; 
+  String? _currentAddress; 
   bool _loading = false;
   MapType _currentMapType = MapType.normal;
   
-  // Haritadaki diğer köpekleri göstermek için
   Set<Marker> _otherLostDogMarkers = {}; 
+  
+  late Future<LatLng> _initialLocationFuture;
 
   @override
   void initState() {
     super.initState();
-    // Eğer sadece gezinme modundaysak (dogId boşsa), diğer kayıp köpekleri haritaya yükle
+    _initialLocationFuture = _getCurrentLocation();
+
     if (widget.dogId.isEmpty) {
       _loadOtherLostDogs();
     }
   }
 
-  // Diğer kayıp köpekleri Firestore'dan çekip haritaya koyar
   Future<void> _loadOtherLostDogs() async {
     final snapshot = await FirebaseFirestore.instance.collection('lost_dogs').get();
     final markers = snapshot.docs.map((doc) {
@@ -44,18 +47,19 @@ class _LostMapPageState extends State<LostMapPage> {
         position: LatLng(data['lat'], data['lng']),
         infoWindow: InfoWindow(
           title: data['dogName'] ?? 'Kayıp Köpek',
-          snippet: data['note'] ?? 'Açıklama yok',
+          snippet: data['address'] ?? data['note'] ?? '', 
         ),
         icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
       );
     }).toSet();
 
-    setState(() {
-      _otherLostDogMarkers = markers;
-    });
+    if (mounted) {
+      setState(() {
+        _otherLostDogMarkers = markers;
+      });
+    }
   }
 
-  // Mevcut konumu al
   Future<LatLng> _getCurrentLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
     if (!serviceEnabled) return const LatLng(41.0082, 28.9784);
@@ -72,7 +76,33 @@ class _LostMapPageState extends State<LostMapPage> {
     return LatLng(pos.latitude, pos.longitude);
   }
 
-  // Kayıp İlanı Kaydet (Sadece dogId doluysa çalışır)
+  Future<void> _getAddressFromLatLng() async {
+    if (_currentCenterPosition == null) return;
+
+    try {
+      List<Placemark> placemarks = await placemarkFromCoordinates(
+        _currentCenterPosition!.latitude,
+        _currentCenterPosition!.longitude
+      );
+
+      if (placemarks.isNotEmpty) {
+        Placemark place = placemarks[0];
+        if (mounted) {
+          setState(() {
+            _currentAddress = "${place.thoroughfare ?? ''} ${place.subLocality ?? ''}, ${place.subAdministrativeArea ?? ''}";
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint("Adres hatası: $e");
+      if (mounted) {
+        setState(() {
+          _currentAddress = "Adres bulunamadı (${_currentCenterPosition!.latitude.toStringAsFixed(4)}, ${_currentCenterPosition!.longitude.toStringAsFixed(4)})";
+        });
+      }
+    }
+  }
+
   Future<void> _saveLocationAndReport() async {
     if (_currentCenterPosition == null || widget.dogId.isEmpty) return;
 
@@ -81,7 +111,6 @@ class _LostMapPageState extends State<LostMapPage> {
     try {
       final uid = FirebaseAuth.instance.currentUser!.uid;
 
-      // Köpek bilgilerini çek
       final dogDoc = await FirebaseFirestore.instance
           .collection('users')
           .doc(uid)
@@ -92,23 +121,25 @@ class _LostMapPageState extends State<LostMapPage> {
       if (!dogDoc.exists) throw Exception("Köpek profili bulunamadı!");
       final dogData = dogDoc.data()!;
       
-      // Kaydet
       await FirebaseFirestore.instance.collection("lost_dogs").add({
         "dogId": widget.dogId,
         "userId": uid,
         "dogName": dogData['name'] ?? 'İsimsiz',
         "dogBreed": dogData['breed'] ?? '',
         "dogImage": dogData['imageUrl'] ?? '',
+        "ownerPhone": dogData['ownerPhone'] ?? '', 
         "lat": _currentCenterPosition!.latitude,
         "lng": _currentCenterPosition!.longitude,
+        "address": _currentAddress ?? "Adres alınamadı",
         "timestamp": FieldValue.serverTimestamp(),
         "note": _noteController.text.trim(),
         "status": "lost",
+        "found": false,
       });
 
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Kayıp ilanı başarıyla yayınlandı!"), backgroundColor: Colors.green),
+          const SnackBar(content: Text("Kayıp ilanı ve konum yayınlandı!"), backgroundColor: Colors.green),
         );
         Navigator.pop(context); 
       }
@@ -121,7 +152,6 @@ class _LostMapPageState extends State<LostMapPage> {
 
   @override
   Widget build(BuildContext context) {
-    // Rapor modu mu? (dogId doluysa evet)
     final bool isReportMode = widget.dogId.isNotEmpty;
 
     return Scaffold(
@@ -136,30 +166,48 @@ class _LostMapPageState extends State<LostMapPage> {
         ],
       ),
       body: FutureBuilder<LatLng>(
-        future: _getCurrentLocation(),
+        future: _initialLocationFuture, 
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
 
           final initialPos = snapshot.data ?? const LatLng(41.0082, 28.9784);
-          if (_currentCenterPosition == null) _currentCenterPosition = initialPos;
+          
+          if (_currentCenterPosition == null) {
+            _currentCenterPosition = initialPos;
+            if (isReportMode) {
+               Future.microtask(() => _getAddressFromLatLng());
+            }
+          }
 
           return Stack(
             children: [
-              // 1. HARİTA
               GoogleMap(
                 initialCameraPosition: CameraPosition(target: initialPos, zoom: 15),
                 mapType: _currentMapType,
                 myLocationEnabled: true,
                 zoomControlsEnabled: false,
-                // Rapor modundaysak sadece kendi pinimizi gösteririz, değilse diğer köpekleri
                 markers: isReportMode ? {} : _otherLostDogMarkers, 
-                onMapCreated: (controller) => _mapController.complete(controller),
-                onCameraMove: (pos) => _currentCenterPosition = pos.target,
+                
+                // ⚡ DÜZELTİLEN KISIM
+                onMapCreated: (controller) {
+                  if (!_mapController.isCompleted) {
+                    _mapController.complete(controller);
+                  }
+                },
+                
+                onCameraMove: (pos) {
+                  _currentCenterPosition = pos.target;
+                },
+                
+                onCameraIdle: () {
+                  if (isReportMode) {
+                    _getAddressFromLatLng();
+                  }
+                },
               ),
 
-              // 2. SABİT PİN (Sadece Rapor Modunda Görünür)
               if (isReportMode)
                 const Center(
                   child: Padding(
@@ -168,7 +216,6 @@ class _LostMapPageState extends State<LostMapPage> {
                   ),
                 ),
 
-              // 3. ALT PANEL (Sadece Rapor Modunda Görünür)
               if (isReportMode)
                 Positioned(
                   left: 0, right: 0, bottom: 0,
@@ -185,12 +232,32 @@ class _LostMapPageState extends State<LostMapPage> {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.stretch,
                         children: [
-                          const Text("Detayları Ekleyin", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                          const SizedBox(height: 12),
+                          const Text("Konum Detayı", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const SizedBox(height: 8),
+                          
+                          Row(
+                            children: [
+                              const Icon(Icons.map, color: Colors.blueGrey, size: 20),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  _currentAddress ?? "Konum belirleniyor...",
+                                  style: const TextStyle(fontWeight: FontWeight.w500, color: Colors.black87),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                          
+                          const Divider(height: 24),
+                          
+                          const Text("Ek Açıklama", style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                          const SizedBox(height: 8),
                           TextField(
                             controller: _noteController,
                             decoration: InputDecoration(
-                              hintText: "Örn: Parkın girişinde görüldü...",
+                              hintText: "Örn: Tasması kırmızı, parkın girişinde...",
                               border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                               contentPadding: const EdgeInsets.all(12),
                               filled: true,

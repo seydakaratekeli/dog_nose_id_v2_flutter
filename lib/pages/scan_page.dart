@@ -135,35 +135,57 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
 
     setState(() => _isScanning = true);
 
-    try {
-      final uid = FirebaseAuth.instance.currentUser!.uid;
-
-      // 1) Köpekleri çek
-      final dogDocs = await FirebaseFirestore.instance
-          .collection("users")
-          .doc(uid)
-          .collection("dogs")
+   try {
+      // ---------------------------------------------------------
+      // DÜZELTME: Sadece kendi köpeklerimi değil,
+      // TÜM KAYIP KÖPEKLERİ getirip karşılaştırmalıyız.
+      // ---------------------------------------------------------
+      
+      // 1. Adım: Önce 'lost_dogs' koleksiyonundaki tüm aktif kayıpları çek
+      final lostSnap = await FirebaseFirestore.instance
+          .collection("lost_dogs")
+          .where("found", isEqualTo: false) // Sadece bulunmamış olanlar
           .get();
 
-      if (dogDocs.docs.isEmpty) {
+      if (lostSnap.docs.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("Kayıtlı köpeğin yok.")),
+          const SnackBar(content: Text("Sistemde şu an aranan kayıp bir köpek yok.")),
         );
+        setState(() => _isScanning = false);
         return;
       }
 
-      final dogs = dogDocs.docs.map((d) => Dog.fromMap(d.data())).toList();
+      List<Dog> candidateDogs = [];
 
-      // 2) Eşleştirme (Şu an sahte embedding ile)
-      final scanEmbedding = _generateFakeEmbedding();
+      // 2. Adım: Bu kayıp ilanlarının detaylı 'Dog' profillerini çek
+      // (Gerçek embedding verisi Dog profilinde olduğu için)
+      for (var doc in lostSnap.docs) {
+        final data = doc.data();
+        final ownerId = data['userId'] ?? data['ownerId'];
+        final dogId = data['dogId'];
+
+        if (ownerId != null && dogId != null) {
+          final dogDoc = await FirebaseFirestore.instance
+              .collection("users")
+              .doc(ownerId)
+              .collection("dogs")
+              .doc(dogId)
+              .get();
+          
+          if (dogDoc.exists) {
+            candidateDogs.add(Dog.fromMap(dogDoc.data()!));
+          }
+        }
+      }
+
+      // 3. Adım: Eşleştirme (Cosine Similarity)
+      final scanEmbedding = _generateFakeEmbedding(); // Gerçek model entegre edilince burası değişecek
       Dog? bestMatch;
       double bestScore = -1;
 
-      for (var dog in dogs) {
-        if (lostDogId != null && dog.id != lostDogId) continue;
-
-        // Not: Gerçek model eklendiğinde dog.embedding kullanılacak
-        // Şimdilik dog tarafı için de sahte üretiyoruz
+      for (var dog in candidateDogs) {
+        // Not: Gerçek modelde dog.embedding kullanılacak. 
+        // Şimdilik test için rastgele embedding üretiyoruz.
         final dogEmbedding = _generateFakeEmbedding(); 
         final score = _cosineSimilarity(scanEmbedding, dogEmbedding);
 
@@ -173,7 +195,8 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
         }
       }
 
-      if (bestMatch == null) {
+      // Eşik değer kontrolü (Örn: %80 benzerlik altındaysa bulamadık de)
+      if (bestMatch == null || bestScore < 0.5) { // Test için 0.5 yaptık
         if (mounted) context.push("/not-found");
         return;
       }

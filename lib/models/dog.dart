@@ -4,7 +4,8 @@ class Dog {
   final String breed;
   final int age;
   final String imageUrl;
-  final List<double> embedding; // Yeni alan
+  final List<double> embedding; 
+  final String ownerPhone;
 
   Dog({
     required this.id,
@@ -13,6 +14,8 @@ class Dog {
     required this.age,
     required this.imageUrl,
     required this.embedding,
+    required this.ownerPhone,
+
   });
 
   Map<String, dynamic> toMap() {
@@ -23,6 +26,7 @@ class Dog {
       'age': age,
       'imageUrl': imageUrl,
       'embedding': embedding,
+      'ownerPhone': ownerPhone,
     };
   }
 
@@ -34,6 +38,7 @@ class Dog {
       age: (map['age'] ?? 0) as int,
       imageUrl: map['imageUrl'] ?? '',
       embedding: List<double>.from(map['embedding'] ?? []),
+      ownerPhone: map['ownerPhone'] ?? '',
     );
   }
 }

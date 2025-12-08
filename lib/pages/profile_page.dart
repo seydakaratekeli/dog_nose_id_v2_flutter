@@ -136,6 +136,14 @@ class _ProfilePageState extends State<ProfilePage> {
             ),
 
             _buildMenuItem(
+              icon: Icons.history_edu, // Veya Icons.assignment
+              title: "İlanlarım ve Bildirimlerim",
+              onTap: () => context.push("/my-reports"), 
+            ),
+
+
+
+            _buildMenuItem(
               icon: Icons.color_lens_outlined,
               title: "Tema Değiştir",
               onTap: () {

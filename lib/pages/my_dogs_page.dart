@@ -3,6 +3,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import '../models/dog.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class MyDogsPage extends StatelessWidget {
   const MyDogsPage({super.key});
@@ -82,19 +83,23 @@ class MyDogsPage extends StatelessWidget {
                 child: ListTile(
                   contentPadding: const EdgeInsets.all(8),
                   leading: ClipRRect(
-                    borderRadius: BorderRadius.circular(8),
-                    child: Image.network(
-                      dog.imageUrl,
-                      width: 60,
-                      height: 60,
-                      fit: BoxFit.cover,
-                      errorBuilder: (c, e, s) => Container(
-                        width: 60, height: 60,
-                        color: Colors.grey.shade300,
-                        child: const Icon(Icons.pets),
-                      ),
+                  borderRadius: BorderRadius.circular(8),
+                  // YENİ: CachedNetworkImage
+                  child: CachedNetworkImage(
+                    imageUrl: dog.imageUrl,
+                    width: 60,
+                    height: 60,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      width: 60, height: 60, color: Colors.grey.shade200,
+                      child: const Icon(Icons.downloading, size: 20, color: Colors.grey),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: 60, height: 60, color: Colors.grey.shade200,
+                      child: const Icon(Icons.pets, size: 30, color: Colors.grey),
                     ),
                   ),
+                ),
                   title: Text(
                     dog.name,
                     style: const TextStyle(fontWeight: FontWeight.bold),

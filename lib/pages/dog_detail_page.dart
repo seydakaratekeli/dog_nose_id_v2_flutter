@@ -2,8 +2,8 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
-// import '../widgets/report_lost_dog_dialog.dart'; // Artık diyaloğu kullanmıyoruz, gerekirse silebilirsiniz
 import '../models/dog.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 import '../models/scan_history.dart';
 import '../widgets/history_card.dart';
 
@@ -26,7 +26,6 @@ class _DogDetailPageState extends State<DogDetailPage> {
     _checkLostStatus();
   }
 
-  // Kayıp durumunu kontrol et
   Future<void> _checkLostStatus() async {
     final snap = await FirebaseFirestore.instance
         .collection("lost_dogs")
@@ -44,7 +43,6 @@ class _DogDetailPageState extends State<DogDetailPage> {
     }
   }
 
-  // Bulundu taramasına git
   void _scanForFound() {
     context.push("/scan", extra: {
       "lostDogId": widget.dog.id,
@@ -72,19 +70,24 @@ class _DogDetailPageState extends State<DogDetailPage> {
             // FOTOĞRAF
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: Image.network(
-                widget.dog.imageUrl,
+              child: CachedNetworkImage(
+                imageUrl: widget.dog.imageUrl,
                 width: double.infinity,
                 height: 260,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Container(
+                placeholder: (context, url) => Container(
+                  height: 260,
+                  color: Colors.grey.shade200,
+                  child: const Center(child: CircularProgressIndicator()),
+                ),
+                errorWidget: (context, url, error) => Container(
                   height: 260,
                   color: Colors.grey.shade300,
-                  child: const Center(child: Icon(Icons.pets, size: 50)),
+                  child: const Center(
+                      child: Icon(Icons.pets, size: 50, color: Colors.grey)),
                 ),
               ),
             ),
-
             const SizedBox(height: 20),
 
             // BİLGİ KARTI
@@ -110,7 +113,8 @@ class _DogDetailPageState extends State<DogDetailPage> {
                       widget.dog.breed.isNotEmpty
                           ? widget.dog.breed
                           : "Irk: Bilinmiyor",
-                      style: const TextStyle(fontSize: 18, color: Colors.grey),
+                      style:
+                          const TextStyle(fontSize: 18, color: Colors.grey),
                     ),
                     const SizedBox(height: 6),
                     Text(
@@ -141,49 +145,37 @@ class _DogDetailPageState extends State<DogDetailPage> {
 
             const SizedBox(height: 20),
 
-            // BUTONLAR
-            Row(
-              children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    // DÜZELTİLEN KISIM BURASI
-                    onPressed: () {
-                      // Diyalog yerine harita sayfasına gidiyoruz.
-                      // 'extra' parametresi ile hangi köpeğin kayıp olduğunu bildiriyoruz.
-                      context.push("/map", extra: widget.dog.id).then((_) {
-                        // Haritadan geri gelindiğinde durumu tekrar kontrol et
-                        // (Kayıp ilanı verildiyse arayüz güncellensin)
-                        _checkLostStatus();
-                      });
-                    },
-                    icon: const Icon(Icons.location_off),
-                    label: const Text("Kayıp Olarak İşaretle"),
-                    style: ElevatedButton.styleFrom(
-                      // Butonu biraz daha dikkat çekici yapabiliriz (Opsiyonel)
-                      backgroundColor: Colors.red.shade50,
-                      foregroundColor: Colors.red.shade900,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: _isLost ? _scanForFound : null,
-                    icon: const Icon(Icons.search),
-                    label: const Text("Bulundu mu?"),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          _isLost ? Colors.green : Colors.grey.shade400,
-                      foregroundColor: Colors.white,
-                    ),
-                  ),
-                ),
-              ],
+            // PROFESYONEL RESPONSIVE BUTONLAR
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final isSmall = constraints.maxWidth < 380;
+
+                return isSmall
+                    ? Column(
+                        children: [
+                          SizedBox(
+                            width: double.infinity,
+                            child: _buildLostButton(),
+                          ),
+                          const SizedBox(height: 12),
+                          SizedBox(
+                            width: double.infinity,
+                            child: _buildFoundButton(),
+                          ),
+                        ],
+                      )
+                    : Row(
+                        children: [
+                          Expanded(child: _buildLostButton()),
+                          const SizedBox(width: 14),
+                          Expanded(child: _buildFoundButton()),
+                        ],
+                      );
+              },
             ),
 
             const SizedBox(height: 24),
 
-            // TARİHÇE BAŞLIK
             const Text(
               "Geçmiş Taramalar",
               style: TextStyle(
@@ -194,7 +186,6 @@ class _DogDetailPageState extends State<DogDetailPage> {
 
             const SizedBox(height: 12),
 
-            // TARİHÇE LİSTESİ
             StreamBuilder<QuerySnapshot>(
               stream: FirebaseFirestore.instance
                   .collection('scan_history')
@@ -239,19 +230,65 @@ class _DogDetailPageState extends State<DogDetailPage> {
                 return Column(
                   children: docs
                       .map((d) => HistoryCard(
-                            history: ScanHistory.fromMap(
-                                d.data() as Map<String, dynamic>),
-                          ))
+                          history: ScanHistory.fromMap(
+                              d.data() as Map<String, dynamic>)))
                       .toList(),
                 );
               },
             ),
-            
-            // Sayfa sonu boşluğu
+
             const SizedBox(height: 40),
           ],
         ),
       ),
+    );
+  }
+
+  Widget _buildLostButton() {
+    return ElevatedButton(
+      onPressed: () {
+        context.push("/map", extra: widget.dog.id).then((_) {
+          _checkLostStatus();
+        });
+      },
+      style: _primaryButtonStyle(Colors.red.shade600),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          Icon(Icons.location_off, size: 20),
+          SizedBox(width: 6),
+          Text("Kayıp Olarak İşaretle"),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFoundButton() {
+    return ElevatedButton(
+      onPressed: _isLost ? _scanForFound : null,
+      style: _primaryButtonStyle(
+        _isLost ? Colors.green.shade600 : Colors.grey.shade400,
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: const [
+          Icon(Icons.search, size: 20),
+          SizedBox(width: 6),
+          Text("Bulundu mu?"),
+        ],
+      ),
+    );
+  }
+
+  ButtonStyle _primaryButtonStyle(Color color) {
+    return ElevatedButton.styleFrom(
+      padding: const EdgeInsets.symmetric(vertical: 14),
+      backgroundColor: color,
+      foregroundColor: Colors.white,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(12),
+      ),
+      elevation: 2,
     );
   }
 }

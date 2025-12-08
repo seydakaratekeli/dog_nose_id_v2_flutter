@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:cached_network_image/cached_network_image.dart'; // 📦 EKLENDİ
 import '../models/dog.dart';
 
 class FoundDogPage extends StatelessWidget {
@@ -14,8 +15,7 @@ class FoundDogPage extends StatelessWidget {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(Icons.check_circle,
-                size: 120, color: Colors.green),
+            const Icon(Icons.check_circle, size: 120, color: Colors.green),
 
             const SizedBox(height: 20),
 
@@ -29,13 +29,24 @@ class FoundDogPage extends StatelessWidget {
 
             const SizedBox(height: 14),
 
+            // ⚡ CACHED IMAGE OPTİMİZASYONU
             ClipRRect(
               borderRadius: BorderRadius.circular(16),
-              child: Image.network(
-                dog.imageUrl,
+              child: CachedNetworkImage(
+                imageUrl: dog.imageUrl,
                 height: 200,
                 width: 200,
                 fit: BoxFit.cover,
+                placeholder: (context, url) => Container(
+                  height: 200, width: 200,
+                  color: Colors.grey.shade200,
+                  child: const CircularProgressIndicator(),
+                ),
+                errorWidget: (context, url, error) => Container(
+                  height: 200, width: 200,
+                  color: Colors.grey.shade200,
+                  child: const Icon(Icons.pets, size: 60, color: Colors.grey),
+                ),
               ),
             ),
 
