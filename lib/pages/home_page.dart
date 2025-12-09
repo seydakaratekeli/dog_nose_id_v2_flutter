@@ -12,8 +12,11 @@ class HomePage extends StatefulWidget {
   State<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin {
+class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin, AutomaticKeepAliveClientMixin {
   late TabController _tabController;
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
@@ -35,6 +38,7 @@ class _HomePageState extends State<HomePage> with SingleTickerProviderStateMixin
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin için gerekli
     final user = FirebaseAuth.instance.currentUser;
 
     return Scaffold(
@@ -133,7 +137,7 @@ class _LostDogsTabState extends State<LostDogsTab> with AutomaticKeepAliveClient
               const SizedBox(width: 10),
               Expanded(
                 child: ElevatedButton.icon(
-                  onPressed: () => context.push('/map', extra: ''),
+                  onPressed: () => context.go('/map'),
                   icon: const Icon(Icons.map),
                   label: const Text("Harita"),
                   style: ElevatedButton.styleFrom(
@@ -177,7 +181,6 @@ class _LostDogsTabState extends State<LostDogsTab> with AutomaticKeepAliveClient
                   final name = data['dogName'] ?? 'İsimsiz';
                   final breed = data['dogBreed'] ?? 'Irkı Bilinmiyor';
                   final address = data['address'] ?? 'Konum bilgisi yok';
-                  final age = data['dogAge'] ?? '?'; // Eğer kaydettiyseniz
 
                   // Dog nesnesini detay sayfası için manuel oluşturuyoruz
                   // (Tam veri olmadığı için sadece görüntüleme amaçlı)

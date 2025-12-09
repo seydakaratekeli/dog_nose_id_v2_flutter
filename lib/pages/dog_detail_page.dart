@@ -16,14 +16,20 @@ class DogDetailPage extends StatefulWidget {
   State<DogDetailPage> createState() => _DogDetailPageState();
 }
 
-class _DogDetailPageState extends State<DogDetailPage> {
+class _DogDetailPageState extends State<DogDetailPage> with AutomaticKeepAliveClientMixin {
   bool _isLost = false;
   String? _lostRecordId;
+  bool _statusChecked = false; // Cache kontrolü
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
-    _checkLostStatus();
+    if (!_statusChecked) {
+      _checkLostStatus();
+    }
   }
 
   Future<void> _checkLostStatus() async {
@@ -38,6 +44,13 @@ class _DogDetailPageState extends State<DogDetailPage> {
         setState(() {
           _isLost = true;
           _lostRecordId = snap.docs.first.id;
+          _statusChecked = true;
+        });
+      }
+    } else {
+      if (mounted) {
+        setState(() {
+          _statusChecked = true;
         });
       }
     }
@@ -52,6 +65,7 @@ class _DogDetailPageState extends State<DogDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin için gerekli
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.dog.name),
@@ -247,7 +261,7 @@ class _DogDetailPageState extends State<DogDetailPage> {
   Widget _buildLostButton() {
     return ElevatedButton(
       onPressed: () {
-        context.push("/map", extra: widget.dog.id).then((_) {
+        context.push("/map/report/${widget.dog.id}").then((_) {
           _checkLostStatus();
         });
       },

@@ -12,20 +12,26 @@ class ProfilePage extends StatefulWidget {
   State<ProfilePage> createState() => _ProfilePageState();
 }
 
-class _ProfilePageState extends State<ProfilePage> {
+class _ProfilePageState extends State<ProfilePage> with AutomaticKeepAliveClientMixin {
   String? email;
   String displayName = "Kullanıcı"; // Varsayılan isim
   int dogCount = 0;
   int lostCount = 0;
   bool loading = true;
+  bool _dataLoaded = false; // Cache kontrolü
+
+  @override
+  bool get wantKeepAlive => true; // Sayfayı bellekte tut
 
   @override
   void initState() {
     super.initState();
-    _loadProfileData();
+    if (!_dataLoaded) {
+      _loadProfileData();
+    }
   }
 
-  // Profil verilerini çek (Sayfa her açıldığında tetiklenmeli)
+  // Profil verilerini çek (Sadece ilk açılışta)
   Future<void> _loadProfileData() async {
     final user = FirebaseAuth.instance.currentUser;
     email = user?.email;
@@ -58,10 +64,14 @@ class _ProfilePageState extends State<ProfilePage> {
           dogCount = dogs.docs.length;
           lostCount = lostDogs.docs.length;
           loading = false;
+          _dataLoaded = true; // Veri yüklendi işaretle
         });
       }
     } else {
-        if (mounted) setState(() => loading = false);
+        if (mounted) setState(() {
+          loading = false;
+          _dataLoaded = true;
+        });
     }
   }
 
@@ -74,6 +84,7 @@ class _ProfilePageState extends State<ProfilePage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin için gerekli
     final theme = Theme.of(context);
 
     if (loading) {

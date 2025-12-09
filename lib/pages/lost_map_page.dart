@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:geocoding/geocoding.dart';
+import 'package:cached_network_image/cached_network_image.dart';
 
 class LostMapPage extends StatefulWidget {
   final String dogId; 
@@ -15,7 +16,7 @@ class LostMapPage extends StatefulWidget {
   State<LostMapPage> createState() => _LostMapPageState();
 }
 
-class _LostMapPageState extends State<LostMapPage> {
+class _LostMapPageState extends State<LostMapPage> with AutomaticKeepAliveClientMixin {
   final Completer<GoogleMapController> _mapController = Completer();
   final TextEditingController _noteController = TextEditingController();
 
@@ -27,49 +28,56 @@ class _LostMapPageState extends State<LostMapPage> {
   Set<Marker> _otherLostDogMarkers = {}; 
   
   late Future<LatLng> _initialLocationFuture;
+  bool _markersLoaded = false; // Cache kontrolü
+
+  @override
+  bool get wantKeepAlive => true;
 
   @override
   void initState() {
     super.initState();
     _initialLocationFuture = _getCurrentLocation();
 
-    if (widget.dogId.isEmpty) {
+    if (widget.dogId.isEmpty && !_markersLoaded) {
       _loadOtherLostDogs();
     }
   }
 
   Future<void> _loadOtherLostDogs() async {
     final snapshot = await FirebaseFirestore.instance.collection('lost_dogs').get();
-    final markers = snapshot.docs.map((doc) {
+    final markers = <Marker>{};
+
+    for (var doc in snapshot.docs) {
       final data = doc.data();
-      return Marker(
-        markerId: MarkerId(doc.id),
-        position: LatLng(data['lat'], data['lng']),
-        infoWindow: InfoWindow(
-          title: data['dogName'] ?? 'Kayıp Köpek',
-          snippet: data['address'] ?? data['note'] ?? '', 
+      
+      markers.add(
+        Marker(
+          markerId: MarkerId(doc.id),
+          position: LatLng(data['lat'], data['lng']),
+          onTap: () => _showDogInfoDialog(data),
+          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
         ),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueOrange),
       );
-    }).toSet();
+    }
 
     if (mounted) {
       setState(() {
         _otherLostDogMarkers = markers;
+        _markersLoaded = true; // Markerlar yüklendi
       });
     }
   }
 
   Future<LatLng> _getCurrentLocation() async {
     bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
-    if (!serviceEnabled) return const LatLng(41.0082, 28.9784);
+    if (!serviceEnabled) return const LatLng(41.6358, 32.3375); // Bartın koordinatları
 
     LocationPermission permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
     }
     if (permission == LocationPermission.deniedForever || permission == LocationPermission.denied) {
-      return const LatLng(41.0082, 28.9784);
+      return const LatLng(41.6358, 32.3375); // Bartın koordinatları
     }
 
     final pos = await Geolocator.getCurrentPosition(desiredAccuracy: LocationAccuracy.high);
@@ -101,6 +109,169 @@ class _LostMapPageState extends State<LostMapPage> {
         });
       }
     }
+  }
+
+  void _showDogInfoDialog(Map<String, dynamic> data) {
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 400),
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Köpek Fotoğrafı
+              if (data['dogImage'] != null && data['dogImage'].toString().isNotEmpty)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: CachedNetworkImage(
+                    imageUrl: data['dogImage'],
+                    width: double.infinity,
+                    height: 200,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      height: 200,
+                      color: Colors.grey.shade200,
+                      child: const Center(child: CircularProgressIndicator()),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      height: 200,
+                      color: Colors.grey.shade200,
+                      child: const Icon(Icons.pets, size: 60, color: Colors.grey),
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 16),
+              
+              // Köpek İsmi
+              Row(
+                children: [
+                  const Icon(Icons.pets, color: Colors.orange, size: 28),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      data['dogName'] ?? 'İsimsiz Köpek',
+                      style: const TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              
+              // Irk Bilgisi
+              if (data['dogBreed'] != null && data['dogBreed'].toString().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.info_outline, color: Colors.blue, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Irk: ${data['dogBreed']}',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              
+              // Konum
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.location_on, color: Colors.red, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      data['address'] ?? 'Konum bilgisi yok',
+                      style: const TextStyle(fontSize: 14),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              
+              // Not
+              if (data['note'] != null && data['note'].toString().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Container(
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.amber.shade50,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: Colors.amber.shade200),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.note, color: Colors.amber, size: 20),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            data['note'],
+                            style: const TextStyle(fontSize: 14),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              
+              // İletişim Bilgisi
+              if (data['ownerPhone'] != null && data['ownerPhone'].toString().isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(top: 12),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.phone, color: Colors.green, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        data['ownerPhone'],
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              
+              const SizedBox(height: 20),
+              
+              // Kapat Butonu
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text(
+                    'KAPAT',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Future<void> _saveLocationAndReport() async {
@@ -152,6 +323,7 @@ class _LostMapPageState extends State<LostMapPage> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin için gerekli
     final bool isReportMode = widget.dogId.isNotEmpty;
 
     return Scaffold(
@@ -172,7 +344,7 @@ class _LostMapPageState extends State<LostMapPage> {
             return const Center(child: CircularProgressIndicator());
           }
 
-          final initialPos = snapshot.data ?? const LatLng(41.0082, 28.9784);
+          final initialPos = snapshot.data ?? const LatLng(41.6358, 32.3375);
           
           if (_currentCenterPosition == null) {
             _currentCenterPosition = initialPos;

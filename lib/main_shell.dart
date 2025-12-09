@@ -1,42 +1,23 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-class MainShell extends StatefulWidget {
-  final Widget child;
+class MainShell extends StatelessWidget {
+  final StatefulNavigationShell navigationShell;
 
-  const MainShell({super.key, required this.child});
-
-  @override
-  State<MainShell> createState() => _MainShellState();
-}
-
-class _MainShellState extends State<MainShell> {
-  int _index = 0;
+  const MainShell({super.key, required this.navigationShell});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: widget.child,
+      body: navigationShell,
 
       bottomNavigationBar: NavigationBar(
-        selectedIndex: _index,
+        selectedIndex: navigationShell.currentIndex,
         onDestinationSelected: (newIndex) {
-          setState(() => _index = newIndex);
-
-          switch (newIndex) {
-            case 0:
-              context.go('/home');
-              break;
-            case 1:
-              context.go('/scan');
-              break;
-            case 2:
-              context.go('/map');
-              break;
-            case 3:
-              context.go('/profile');
-              break;
-          }
+          navigationShell.goBranch(
+            newIndex,
+            initialLocation: newIndex == navigationShell.currentIndex,
+          );
         },
 
         destinations: const [

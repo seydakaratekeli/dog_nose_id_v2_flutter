@@ -4,8 +4,18 @@ import 'package:go_router/go_router.dart';
 import 'package:cached_network_image/cached_network_image.dart'; // 📦 Paket import edildi
 import '../models/dog.dart';
 
-class LostDogListPage extends StatelessWidget {
+class LostDogListPage extends StatefulWidget {
   const LostDogListPage({super.key});
+
+  @override
+  State<LostDogListPage> createState() => _LostDogListPageState();
+}
+
+class _LostDogListPageState extends State<LostDogListPage> with AutomaticKeepAliveClientMixin {
+  final Map<String, Dog?> _dogCache = {}; // Köpek verileri için cache
+
+  @override
+  bool get wantKeepAlive => true;
 
   Stream<List<Map<String, dynamic>>> _lostDogsStream() {
     // 'lost_dogs' koleksiyonunu dinliyoruz
@@ -16,9 +26,15 @@ class LostDogListPage extends StatelessWidget {
         .map((snapshot) => snapshot.docs.map((e) => e.data()).toList());
   }
 
-  // Köpeğin detaylarını sahibinin profilinden çekiyoruz
+  // Köpeğin detaylarını sahibinin profilinden çekiyoruz - CACHE ile
   Future<Dog?> _getDog(String? dogId, String? userId) async {
     if (dogId == null || userId == null) return null;
+
+    // Cache kontrolü
+    final cacheKey = '$userId-$dogId';
+    if (_dogCache.containsKey(cacheKey)) {
+      return _dogCache[cacheKey];
+    }
 
     try {
       final doc = await FirebaseFirestore.instance
@@ -29,16 +45,20 @@ class LostDogListPage extends StatelessWidget {
           .get();
 
       if (doc.exists) {
-        return Dog.fromMap(doc.data()!);
+        final dog = Dog.fromMap(doc.data()!);
+        _dogCache[cacheKey] = dog; // Cache'e kaydet
+        return dog;
       }
     } catch (e) {
       debugPrint("Köpek verisi çekilemedi: $e");
     }
+    _dogCache[cacheKey] = null; // Null sonucu da cache'le
     return null;
   }
 
   @override
   Widget build(BuildContext context) {
+    super.build(context); // AutomaticKeepAliveClientMixin için gerekli
     return Scaffold(
       appBar: AppBar(title: const Text("Kayıp Köpek İhbarları")),
 
@@ -166,7 +186,7 @@ class LostDogListPage extends StatelessWidget {
                               icon: const Icon(Icons.map_outlined, color: Colors.blue),
                               tooltip: "Konumu Gör",
                               onPressed: () {
-                                context.push("/map", extra: dog.id);
+                                context.push("/map/report/${dog.id}");
                               },
                             ),
                           ),
