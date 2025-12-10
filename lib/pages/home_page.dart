@@ -112,6 +112,18 @@ class _LostDogsTabState extends State<LostDogsTab> with AutomaticKeepAliveClient
   @override
   bool get wantKeepAlive => true;
 
+  // Stream'i instance variable olarak tanımla - her build'de yeniden oluşturulmaz
+  late final Stream<QuerySnapshot> _lostDogsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _lostDogsStream = FirebaseFirestore.instance
+        .collection('lost_dogs')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context); // Mixin için gerekli
@@ -152,10 +164,7 @@ class _LostDogsTabState extends State<LostDogsTab> with AutomaticKeepAliveClient
 
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('lost_dogs')
-                .orderBy('timestamp', descending: true)
-                .snapshots(),
+            stream: _lostDogsStream,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -170,100 +179,16 @@ class _LostDogsTabState extends State<LostDogsTab> with AutomaticKeepAliveClient
               return ListView.builder(
                 padding: const EdgeInsets.symmetric(horizontal: 12),
                 itemCount: docs.length,
+                addAutomaticKeepAlives: true, // Liste öğelerinin state'ini koru
+                addRepaintBoundaries: true, // Repaint optimizasyonu
+                cacheExtent: 500, // Ekran dışındaki öğeleri cache'le
                 itemBuilder: (context, index) {
                   final data = docs[index].data() as Map<String, dynamic>;
+                  final docId = docs[index].id;
                   
-                  // OPTİMİZASYON: Artık _getDog ile tekrar sorgu yapmıyoruz!
-                  // lost_dogs koleksiyonuna kaydettiğimiz verileri doğrudan kullanıyoruz.
-                  
-                  // Eğer eski veri ise (resim yoksa) placeholder gösterelim
-                  final imageUrl = data['dogImage'] ?? data['imageUrl'] ?? '';
-                  final name = data['dogName'] ?? 'İsimsiz';
-                  final breed = data['dogBreed'] ?? 'Irkı Bilinmiyor';
-                  final address = data['address'] ?? 'Konum bilgisi yok';
-
-                  // Dog nesnesini detay sayfası için manuel oluşturuyoruz
-                  // (Tam veri olmadığı için sadece görüntüleme amaçlı)
-                  final simpleDog = Dog(
-                    id: data['dogId'] ?? '',
-                    name: name,
-                    breed: breed,
-                    age: 0, // Listeden yaş gelmiyorsa varsayılan
-                    imageUrl: imageUrl,
-                    embedding: [], 
-                    ownerPhone: data['ownerPhone'] ?? '',
-                  );
-
-                  return Card(
-                    elevation: 3,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: Colors.red.shade200, width: 1),
-                    ),
-                    child: InkWell(
-                      onTap: () => context.push('/dog-detail', extra: simpleDog),
-                      borderRadius: BorderRadius.circular(16),
-                      child: Column(
-                        children: [
-                          ClipRRect(
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                            child: imageUrl.isNotEmpty 
-                              ? CachedNetworkImage(
-                                  imageUrl: imageUrl,
-                                  height: 150,
-                                  width: double.infinity,
-                                  fit: BoxFit.cover,
-                                  placeholder: (context, url) => Container(
-                                    height: 150,
-                                    color: Colors.grey.shade200,
-                                    child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                                  ),
-                                  errorWidget: (context, url, error) => Container(
-                                    height: 150,
-                                    color: Colors.grey.shade200,
-                                    child: const Icon(Icons.pets, color: Colors.grey, size: 50),
-                                  ),
-                                )
-                              : Container(
-                                  height: 150,
-                                  width: double.infinity,
-                                  color: Colors.grey.shade300,
-                                  child: const Icon(Icons.image_not_supported),
-                                ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(12.0),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
-                                      child: const Text("KAYIP", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 4),
-                                Text("$breed", style: TextStyle(color: Colors.grey[700])),
-                                const SizedBox(height: 8),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.location_on, size: 16, color: Colors.grey),
-                                    const SizedBox(width: 4),
-                                    Expanded(child: Text(address, style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  return LostDogCard(
+                    key: ValueKey(docId), // Her kart için unique key
+                    data: data,
                   );
                 },
               );
@@ -289,6 +214,18 @@ class _FoundDogsTabState extends State<FoundDogsTab> with AutomaticKeepAliveClie
   @override
   bool get wantKeepAlive => true; // Sekme değişse de canlı tut
 
+  // Stream'i instance variable olarak tanımla
+  late final Stream<QuerySnapshot> _foundDogsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _foundDogsStream = FirebaseFirestore.instance
+        .collection('found_dogs')
+        .orderBy('timestamp', descending: true)
+        .snapshots();
+  }
+
   @override
   Widget build(BuildContext context) {
     super.build(context); // Mixin
@@ -312,10 +249,7 @@ class _FoundDogsTabState extends State<FoundDogsTab> with AutomaticKeepAliveClie
         ),
         Expanded(
           child: StreamBuilder<QuerySnapshot>(
-            stream: FirebaseFirestore.instance
-                .collection('found_dogs')
-                .orderBy('timestamp', descending: true)
-                .snapshots(),
+            stream: _foundDogsStream,
             builder: (context, snapshot) {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
@@ -328,75 +262,17 @@ class _FoundDogsTabState extends State<FoundDogsTab> with AutomaticKeepAliveClie
               return ListView.builder(
                 padding: const EdgeInsets.all(12),
                 itemCount: docs.length,
+                addAutomaticKeepAlives: true,
+                addRepaintBoundaries: true,
+                cacheExtent: 500,
                 itemBuilder: (context, index) {
                   final item = docs[index].data() as Map<String, dynamic>;
+                  final docId = docs[index].id;
                   
-                  return Card(
-                    elevation: 2,
-                    margin: const EdgeInsets.only(bottom: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                      side: BorderSide(color: Colors.orange.shade200, width: 1),
-                    ),
-                    child: InkWell(
-                      borderRadius: BorderRadius.circular(16),
-                      onTap: () => context.push('/found-dog-detail', extra: item),
-                      child: Column(
-                        children: [
-                          Hero(
-                            tag: item['imageUrl'] ?? 'no_img_$index', 
-                            child: ClipRRect(
-                              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-                              child: CachedNetworkImage(
-                                imageUrl: item['imageUrl'] ?? '',
-                                height: 180,
-                                width: double.infinity,
-                                fit: BoxFit.cover,
-                                placeholder: (context, url) => Container(
-                                  height: 180, 
-                                  color: Colors.grey[200], 
-                                  child: const Center(child: CircularProgressIndicator(strokeWidth: 2))
-                                ),
-                                errorWidget: (context, url, error) => Container(
-                                  height: 180, 
-                                  color: Colors.grey[200], 
-                                  child: const Icon(Icons.image_not_supported, color: Colors.grey)
-                                ),
-                              ),
-                            ),
-                          ),
-                          Padding(
-                            padding: const EdgeInsets.all(12),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                  children: [
-                                    Text(item['breed'] ?? "Irk Bilinmiyor", style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                      decoration: BoxDecoration(color: Colors.orange, borderRadius: BorderRadius.circular(8)),
-                                      child: const Text("GÖRÜLDÜ", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
-                                    ),
-                                  ],
-                                ),
-                                const SizedBox(height: 6),
-                                Text(item['note'] ?? "Açıklama yok", style: TextStyle(color: Colors.grey[800], fontStyle: FontStyle.italic), maxLines: 2, overflow: TextOverflow.ellipsis),
-                                const SizedBox(height: 10),
-                                Row(
-                                  children: [
-                                    const Icon(Icons.location_on, size: 16, color: Colors.grey),
-                                    const SizedBox(width: 4),
-                                    Expanded(child: Text(item['address'] ?? "Konum yok", style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1)),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  return FoundDogCard(
+                    key: ValueKey(docId),
+                    data: item,
+                    index: index,
                   );
                 },
               );
@@ -420,4 +296,216 @@ Widget _buildEmptyState(String message, IconData icon) {
       ],
     ),
   );
+}
+
+// =================================================================
+// KAYIP KÖPEK KARTI (State'i Korunan Widget)
+// =================================================================
+class LostDogCard extends StatefulWidget {
+  final Map<String, dynamic> data;
+
+  const LostDogCard({super.key, required this.data});
+
+  @override
+  State<LostDogCard> createState() => _LostDogCardState();
+}
+
+class _LostDogCardState extends State<LostDogCard> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true; // Widget'ın state'ini koru
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context); // Mixin için gerekli
+
+    final imageUrl = widget.data['dogImage'] ?? widget.data['imageUrl'] ?? '';
+    final name = widget.data['dogName'] ?? 'İsimsiz';
+    final breed = widget.data['dogBreed'] ?? 'Irkı Bilinmiyor';
+    final address = widget.data['address'] ?? 'Konum bilgisi yok';
+
+    final simpleDog = Dog(
+      id: widget.data['dogId'] ?? '',
+      name: name,
+      breed: breed,
+      age: 0,
+      imageUrl: imageUrl,
+      embedding: [],
+      ownerPhone: widget.data['ownerPhone'] ?? '',
+    );
+
+    return Card(
+      elevation: 3,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.red.shade200, width: 1),
+      ),
+      child: InkWell(
+        onTap: () => context.push('/dog-detail', extra: simpleDog),
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: imageUrl.isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: imageUrl,
+                      height: 150,
+                      width: double.infinity,
+                      fit: BoxFit.cover,
+                      memCacheHeight: 300, // Memory cache optimizasyonu
+                      memCacheWidth: 600,
+                      placeholder: (context, url) => Container(
+                        height: 150,
+                        color: Colors.grey.shade200,
+                        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        height: 150,
+                        color: Colors.grey.shade200,
+                        child: const Icon(Icons.pets, color: Colors.grey, size: 50),
+                      ),
+                    )
+                  : Container(
+                      height: 150,
+                      width: double.infinity,
+                      color: Colors.grey.shade300,
+                      child: const Icon(Icons.image_not_supported),
+                    ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(name, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(color: Colors.red, borderRadius: BorderRadius.circular(8)),
+                        child: const Text("KAYIP", style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 4),
+                  Text(breed, style: TextStyle(color: Colors.grey[700])),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Expanded(child: Text(address, style: const TextStyle(fontSize: 12, color: Colors.grey), maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// =================================================================
+// GÖRÜLEN KÖPEK KARTI (State'i Korunan Widget)
+// =================================================================
+class FoundDogCard extends StatefulWidget {
+  final Map<String, dynamic> data;
+  final int index;
+
+  const FoundDogCard({super.key, required this.data, required this.index});
+
+  @override
+  State<FoundDogCard> createState() => _FoundDogCardState();
+}
+
+class _FoundDogCardState extends State<FoundDogCard> with AutomaticKeepAliveClientMixin {
+  @override
+  bool get wantKeepAlive => true;
+
+  @override
+  Widget build(BuildContext context) {
+    super.build(context);
+
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.only(bottom: 16),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: Colors.orange.shade200, width: 1),
+      ),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => context.push('/found-dog-detail', extra: widget.data),
+        child: Column(
+          children: [
+            Hero(
+              tag: widget.data['imageUrl'] ?? 'no_img_${widget.index}',
+              child: ClipRRect(
+                borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                child: CachedNetworkImage(
+                  imageUrl: widget.data['imageUrl'] ?? '',
+                  height: 180,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  memCacheHeight: 360,
+                  memCacheWidth: 600,
+                  placeholder: (context, url) => Container(
+                      height: 180,
+                      color: Colors.grey[200],
+                      child: const Center(child: CircularProgressIndicator(strokeWidth: 2))),
+                  errorWidget: (context, url, error) => Container(
+                      height: 180,
+                      color: Colors.grey[200],
+                      child: const Icon(Icons.image_not_supported, color: Colors.grey)),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(12),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(widget.data['breed'] ?? "Irk Bilinmiyor",
+                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                        decoration: BoxDecoration(
+                            color: Colors.orange, borderRadius: BorderRadius.circular(8)),
+                        child: const Text("GÖRÜLDÜ",
+                            style: TextStyle(
+                                color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 6),
+                  Text(widget.data['note'] ?? "Açıklama yok",
+                      style: TextStyle(color: Colors.grey[800], fontStyle: FontStyle.italic),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: [
+                      const Icon(Icons.location_on, size: 16, color: Colors.grey),
+                      const SizedBox(width: 4),
+                      Expanded(
+                          child: Text(widget.data['address'] ?? "Konum yok",
+                              style: const TextStyle(fontSize: 12, color: Colors.grey),
+                              maxLines: 1)),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

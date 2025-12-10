@@ -5,13 +5,36 @@ import 'package:go_router/go_router.dart';
 import '../models/dog.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
-class MyDogsPage extends StatelessWidget {
+class MyDogsPage extends StatefulWidget {
   const MyDogsPage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final uid = FirebaseAuth.instance.currentUser?.uid;
+  State<MyDogsPage> createState() => _MyDogsPageState();
+}
 
+class _MyDogsPageState extends State<MyDogsPage> {
+  late final String? uid;
+  late final Stream<QuerySnapshot>? _dogsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    uid = FirebaseAuth.instance.currentUser?.uid;
+    
+    if (uid != null) {
+      // Stream'i bir kez oluştur, her build'de yeniden oluşturma
+      _dogsStream = FirebaseFirestore.instance
+          .collection('users')
+          .doc(uid)
+          .collection('dogs')
+          .snapshots();
+    } else {
+      _dogsStream = null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     if (uid == null) {
       return const Scaffold(
         body: Center(child: Text("Oturum hatası: Giriş yapılmamış.")),
@@ -28,12 +51,7 @@ class MyDogsPage extends StatelessWidget {
       ),
 
       body: StreamBuilder<QuerySnapshot>(
-        // Sadece giriş yapan kullanıcının (uid) köpeklerini dinliyoruz
-        stream: FirebaseFirestore.instance
-            .collection('users')
-            .doc(uid)
-            .collection('dogs')
-            .snapshots(),
+        stream: _dogsStream,
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());

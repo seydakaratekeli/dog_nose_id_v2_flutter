@@ -13,11 +13,33 @@ class MyReportsPage extends StatefulWidget {
 class _MyReportsPageState extends State<MyReportsPage> with SingleTickerProviderStateMixin {
   late TabController _tabController;
   final String? uid = FirebaseAuth.instance.currentUser?.uid;
+  
+  // Stream'leri instance variable olarak tanımla
+  late final Stream<QuerySnapshot>? _lostDogsStream;
+  late final Stream<QuerySnapshot>? _foundDogsStream;
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    
+    // Stream'leri bir kez oluştur
+    if (uid != null) {
+      _lostDogsStream = FirebaseFirestore.instance
+          .collection('lost_dogs')
+          .where('userId', isEqualTo: uid)
+          .orderBy('timestamp', descending: true)
+          .snapshots();
+      
+      _foundDogsStream = FirebaseFirestore.instance
+          .collection('found_dogs')
+          .where('reporterId', isEqualTo: uid)
+          .orderBy('timestamp', descending: true)
+          .snapshots();
+    } else {
+      _lostDogsStream = null;
+      _foundDogsStream = null;
+    }
   }
 
   // 🔥 İLAN SİLME FONKSİYONU
@@ -279,16 +301,14 @@ class _MyReportsPageState extends State<MyReportsPage> with SingleTickerProvider
         children: [
           // 1. SEKME: BENİM KAYIP İLANLARIM
           _buildMyList(
-            collection: 'lost_dogs',
-            queryField: 'userId', // Lost dog modelinde userId kaydediyoruz
+            stream: _lostDogsStream,
             emptyMsg: "Henüz kayıp ilanı vermediniz.",
             isLost: true,
           ),
 
           // 2. SEKME: BENİM GÖRDÜĞÜM KÖPEKLER
           _buildMyList(
-            collection: 'found_dogs',
-            queryField: 'reporterId', // Report found modelinde reporterId var
+            stream: _foundDogsStream,
             emptyMsg: "Henüz bir buluntu bildirimi yapmadınız.",
             isLost: false,
           ),
@@ -297,13 +317,13 @@ class _MyReportsPageState extends State<MyReportsPage> with SingleTickerProvider
     );
   }
 
-  Widget _buildMyList({required String collection, required String queryField, required String emptyMsg, required bool isLost}) {
+  Widget _buildMyList({required Stream<QuerySnapshot>? stream, required String emptyMsg, required bool isLost}) {
+    if (stream == null) {
+      return const Center(child: Text("Giriş yapılmalısınız."));
+    }
+    
     return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection(collection)
-          .where(queryField, isEqualTo: uid)
-          .orderBy('timestamp', descending: true)
-          .snapshots(),
+      stream: stream,
       builder: (context, snapshot) {
         if (snapshot.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
@@ -346,7 +366,10 @@ class _MyReportsPageState extends State<MyReportsPage> with SingleTickerProvider
                 subtitle: Text(sub, maxLines: 1, overflow: TextOverflow.ellipsis),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete_outline, color: Colors.red),
-                  onPressed: () => _deleteReport(collection, docId),
+                  onPressed: () {
+                    final collection = isLost ? 'lost_dogs' : 'found_dogs';
+                    _deleteReport(collection, docId);
+                  },
                   tooltip: "İlanı Kaldır",
                 ),
               ),
