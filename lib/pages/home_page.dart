@@ -346,33 +346,33 @@ class _LostDogCardState extends State<LostDogCard> with AutomaticKeepAliveClient
         child: Column(
           children: [
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-              child: imageUrl.isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: imageUrl,
-                      height: 150,
-                      width: double.infinity,
-                      fit: BoxFit.cover,
-                      memCacheHeight: 300, // Memory cache optimizasyonu
-                      memCacheWidth: 600,
-                      placeholder: (context, url) => Container(
-                        height: 150,
-                        color: Colors.grey.shade200,
-                        child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
-                      ),
-                      errorWidget: (context, url, error) => Container(
-                        height: 150,
-                        color: Colors.grey.shade200,
-                        child: const Icon(Icons.pets, color: Colors.grey, size: 50),
-                      ),
-                    )
-                  : Container(
-                      height: 150,
-                      width: double.infinity,
-                      color: Colors.grey.shade300,
-                      child: const Icon(Icons.image_not_supported),
-                    ),
+  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+  child: imageUrl.isNotEmpty
+      ? AspectRatio(
+          aspectRatio: 16 / 9, // 📌 Fotoğraf orantılı görünür
+          child: CachedNetworkImage(
+            imageUrl: imageUrl,
+            fit: BoxFit.cover,
+            memCacheHeight: 600,
+            memCacheWidth: 900,
+            placeholder: (context, url) => Container(
+              color: Colors.grey.shade200,
+              child: const Center(child: CircularProgressIndicator(strokeWidth: 2)),
             ),
+            errorWidget: (context, url, error) => Container(
+              color: Colors.grey.shade200,
+              child: const Icon(Icons.pets, color: Colors.grey, size: 50),
+            ),
+          ),
+        )
+      : Container(
+          height: 180,
+          width: double.infinity,
+          color: Colors.grey.shade300,
+          child: const Icon(Icons.image_not_supported),
+        ),
+)
+,
             Padding(
               padding: const EdgeInsets.all(12.0),
               child: Column(

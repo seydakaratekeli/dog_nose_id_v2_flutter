@@ -57,7 +57,7 @@ class _DogDetailPageState extends State<DogDetailPage> with AutomaticKeepAliveCl
   }
 
   void _scanForFound() {
-    context.push("/scan", extra: {
+    context.push("/scan-for-found", extra: {
       "lostDogId": widget.dog.id,
       "lostRecordId": _lostRecordId,
     });
@@ -261,7 +261,9 @@ class _DogDetailPageState extends State<DogDetailPage> with AutomaticKeepAliveCl
   Widget _buildLostButton() {
     return ElevatedButton(
       onPressed: () {
-        context.push("/map/report/${widget.dog.id}").then((_) {
+        context.push("/map/report/${widget.dog.id}").then((_) 
+        
+        {
           _checkLostStatus();
         });
       },

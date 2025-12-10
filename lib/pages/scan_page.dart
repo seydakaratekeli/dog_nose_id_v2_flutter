@@ -12,7 +12,14 @@ import '../models/dog.dart';
 import '../models/scan_history.dart';
 
 class ScanPage extends StatefulWidget {
-  const ScanPage({super.key});
+  final String? lostDogId;
+  final String? lostRecordId;
+
+  const ScanPage({
+    super.key,
+    this.lostDogId,
+    this.lostRecordId,
+  });
 
   @override
   State<ScanPage> createState() => _ScanPageState();
@@ -33,17 +40,22 @@ class _ScanPageState extends State<ScanPage> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    // Widget parametrelerini ata
+    lostDogId = widget.lostDogId;
+    lostRecordId = widget.lostRecordId;
     _initCamera();
   }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    // Route argümanlarını al
-    final extra = GoRouterState.of(context).extra;
-    if (extra != null && extra is Map<String, dynamic>) {
-      lostDogId = extra["lostDogId"];
-      lostRecordId = extra["lostRecordId"];
+    // Route argümanlarını al (eğer widget parametresi yoksa)
+    if (lostDogId == null && lostRecordId == null) {
+      final extra = GoRouterState.of(context).extra;
+      if (extra != null && extra is Map<String, dynamic>) {
+        lostDogId = extra["lostDogId"];
+        lostRecordId = extra["lostRecordId"];
+      }
     }
   }
 

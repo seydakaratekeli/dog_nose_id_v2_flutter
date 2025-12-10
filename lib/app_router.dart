@@ -73,16 +73,6 @@ final appRouter = GoRouter(
             GoRoute(
               path: '/map',
               builder: (context, state) => const LostMapPage(dogId: ''),
-              routes: [
-                // Köpek ID'si ile harita açma (nested route)
-                GoRoute(
-                  path: 'report/:dogId',
-                  builder: (context, state) {
-                    final dogId = state.pathParameters['dogId'] ?? '';
-                    return LostMapPage(dogId: dogId);
-                  },
-                ),
-              ],
             ),
           ],
         ),
@@ -100,9 +90,31 @@ final appRouter = GoRouter(
     ),
 
     // DİĞER ROUTE'LAR (Shell dışında)
+    
+    // Kayıp köpek rapor haritası (shell dışında full-screen)
+    GoRoute(
+      path: '/map/report/:dogId',
+      builder: (context, state) {
+        final dogId = state.pathParameters['dogId'] ?? '';
+        return LostMapPage(dogId: dogId);
+      },
+    ),
+
     GoRoute(
       path: '/add-dog',
       builder: (context, state) => const AddDogPage(),
+    ),
+
+    // SCAN (shell dışında, kayıp köpek için)
+    GoRoute(
+      path: '/scan-for-found',
+      builder: (context, state) {
+        final extra = state.extra as Map<String, dynamic>?;
+        return ScanPage(
+          lostDogId: extra?['lostDogId'],
+          lostRecordId: extra?['lostRecordId'],
+        );
+      },
     ),
 
     GoRoute(
